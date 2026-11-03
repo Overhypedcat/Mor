@@ -17,6 +17,10 @@
         {
           "version": "0.1.5",
           "update_link": "https://github.com/Overhypedcat/Mor/releases/download/v0.1.5/Mor.xpi"
+        },
+        {
+          "version": "1.0.0",
+          "update_link": "https://github.com/Overhypedcat/Mor/releases/download/v1.0.0/Mor.xpi"
         }
       ]
     }
