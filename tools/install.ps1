@@ -90,8 +90,18 @@ Step "The helper's launcher"
 $Csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 $Launcher = Join-Path $Helper "MorHelper.exe"
 if (-not (Test-Path $Csc)) { Fail ".NET Framework 4's C# compiler is missing ($Csc)" }
-& $Csc /nologo /target:winexe /optimize "/out:$Launcher" (Join-Path $Helper "launcher\MorHelper.cs")
+$Built = Join-Path ([IO.Path]::GetTempPath()) ("MorHelper-" + [Guid]::NewGuid() + ".exe")
+& $Csc /nologo /target:winexe /optimize "/out:$Built" (Join-Path $Helper "launcher\MorHelper.cs")
 if ($LASTEXITCODE -ne 0) { Fail "the helper's launcher couldn't be built" }
+try {
+    Move-Item $Built $Launcher -Force
+} catch {
+    Remove-Item $Built -ErrorAction SilentlyContinue
+    # Firefox has the helper running: the launcher there is the same program, and the helper's code (what changes
+    # between versions) is read from this folder at its next start
+    if (-not (Test-Path $Launcher)) { Fail "the helper's launcher couldn't be put in place: $($_.Exception.Message)" }
+    Write-Host "The helper is running, so its launcher stays as it is (it works the same)"
+}
 
 Step "Telling Firefox where the helper is"
 New-Item -ItemType Directory -Force $Data | Out-Null

@@ -2,7 +2,14 @@
   "addons": {
     "mor@overhypedcat": {
       "updates": [
-        { "version": "0.1.2", "update_link": "https://github.com/Overhypedcat/Mor/releases/download/v0.1.2/Mor.xpi" }
+        {
+          "version": "0.1.2",
+          "update_link": "https://github.com/Overhypedcat/Mor/releases/download/v0.1.2/Mor.xpi"
+        },
+        {
+          "version": "0.1.3",
+          "update_link": "https://github.com/Overhypedcat/Mor/releases/download/v0.1.3/Mor.xpi"
+        }
       ]
     }
   }
