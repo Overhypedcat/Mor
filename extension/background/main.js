@@ -11,7 +11,8 @@ const UNLOCK_WAIT_MS = 45000; // the longest a stream's start waits for the VPN'
 const TUNNEL_HOSTS = ["*://*.ttvnw.net/*", "*://*.live-video.net/*"];
 const DIRECT_HOSTS = new Set(["usher.ttvnw.net"]); // the playlist Twitch gives Firefox is compared, never tunneled
 
-const settings = { filtered: [], unlock: true };
+// the music filter is on for every channel but those switched off (kept as a list of logins)
+const settings = { filterOff: [], unlock: true };
 const tabs = new Map(); // tabId -> {port, channel, hevc, sid, filter: {...}, audio, unlock: {...}}
 const sids = new Map(); // music filter session -> tabId
 const vpnTabs = new Map(); // tabId -> {channel, port (socks), server, extra}
@@ -22,13 +23,13 @@ const decided = new Map();
 // settings
 
 async function loadSettings() {
-  const saved = await browser.storage.local.get(["filtered", "unlock"]);
-  if (Array.isArray(saved.filtered)) settings.filtered = saved.filtered;
+  const saved = await browser.storage.local.get(["filterOff", "unlock"]);
+  if (Array.isArray(saved.filterOff)) settings.filterOff = saved.filterOff;
   if (typeof saved.unlock === "boolean") settings.unlock = saved.unlock;
 }
 
 function saveSettings() {
-  return browser.storage.local.set({ filtered: settings.filtered, unlock: settings.unlock });
+  return browser.storage.local.set({ filterOff: settings.filterOff, unlock: settings.unlock });
 }
 
 // the helper
@@ -218,7 +219,7 @@ function onHelperGone(wasUp) {
 // the tabs
 
 function filterOn(channel) {
-  return Boolean(channel) && settings.filtered.includes(channel);
+  return Boolean(channel) && !settings.filterOff.includes(channel);
 }
 
 browser.runtime.onConnect.addListener((port) => {
@@ -280,12 +281,6 @@ function onTabMessage(tabId, tab, message) {
     case "audio":
       tab.audio = message.problem || null;
       break;
-    case "toggle-filter": // the switch on the player
-      toggleFilter(tab);
-      break;
-    case "retry": // the retry on the player
-      retryFilter(tab);
-      break;
     default:
       break;
   }
@@ -303,9 +298,9 @@ function endFilter(tab) {
 // The music filter on or off for the tab's channel, kept for next time; every tab on that channel follows.
 function toggleFilter(tab) {
   if (!tab || !tab.channel) return Promise.resolve();
-  const list = settings.filtered.filter((c) => c !== tab.channel);
-  if (!filterOn(tab.channel)) list.push(tab.channel);
-  settings.filtered = list;
+  const list = settings.filterOff.filter((c) => c !== tab.channel);
+  if (filterOn(tab.channel)) list.push(tab.channel);
+  settings.filterOff = list;
   for (const t of tabs.values()) if (t.channel) t.port.postMessage({ type: "filter", on: filterOn(t.channel) });
   return saveSettings();
 }

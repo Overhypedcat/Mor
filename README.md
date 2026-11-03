@@ -13,14 +13,15 @@ the extension: it has no window, starts only while the extension needs it, and s
 
 ### Music filter: remove songs from Twitch streams
 
-- Switch it on per channel, from Mor's toolbar button, while you watch that channel.
+- On for every channel from the start. Switch it off for a channel from Mor's toolbar button while you watch it;
+  Mor remembers the channels you've switched off.
 - Every few seconds it asks Shazam what song is playing in the stream, fetches the song's clean copy from YouTube
   Music (or YouTube), finds exactly where in the song the stream is, and subtracts the song from the sound as it plays,
   matching the streamer's volume and EQ. The streamer's voice, the game and alerts stay.
 - The first seconds of each song are heard until it's recognized. Songs heard before are recognized again without
   asking Shazam.
-- A retry button asks Shazam again if a song isn't being removed. Mor shows what the filter is doing and anything that
-  went wrong.
+- A retry button in Mor's hub asks Shazam again if a song isn't being removed. Mor shows what the filter is doing and
+  anything that went wrong.
 
 ### 1440p unlock: watch region-locked 1440p Twitch streams
 
@@ -63,13 +64,13 @@ Running `Install Mor.cmd` again repairs or updates Mor. Nothing needs admin righ
 
 ## Using Mor
 
-On a Twitch channel's live stream, the music filter has its own row on the player, next to Twitch's buttons. It
-shows up with Twitch's controls: a music note, what the filter is doing ("Listening for music", "Removing Artist -
-Song") or what went wrong, a retry button and the filter's switch for that channel.
+On a Twitch channel's live stream, Twitch's player controls show what the music filter is doing, next to Twitch's
+own buttons: "Listening for music", "Removing Artist - Song", or what went wrong.
 
 Mor's toolbar button opens its hub:
 
-- **Music filter**: the same switch and status as on the player.
+- **Music filter**: switch it off or on for the channel you're watching, see what it's doing, and ask Shazam again
+  with the retry button.
 - **1440p unlock**: on or off for all channels. When it's on, Mor checks each live stream as it starts and shows
   whether it's playing a locked quality through the VPN. Choose 1440p in Twitch's own quality menu. Under **VPN
   servers** are the servers Mor tries, in order; **Add servers** opens a page to add `.conf` files.

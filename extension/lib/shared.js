@@ -147,30 +147,13 @@ const Mor = (() => {
     return [code, `${COUNTRIES[code] || code} · Free ${m[3]}`];
   }
 
-  // The music filter's row on the player: what it says (what went wrong, else what it's doing, else that it's off),
-  // which listening dot is up (0-2, while it listens for a song), the switch's look, and the retry's wait.
-  const MUSIC_STEP_MS = 300; // how long each listening dot stays up
-
+  // What the music filter's text on the player says: what went wrong, else what it's doing, else that it's off.
   function rowText(on, filter, audioProblem) {
     if (!on) return { text: "Off", problem: false };
     const problem = audioProblem || filter.problem;
     if (problem) return { text: problem, problem: true };
     if (filter.step) return { text: filter.step, problem: false };
     return { text: filter.state === "filtering" ? "Removing the song" : "Listening for music", problem: false };
-  }
-
-  function rowState(on, filter, audioProblem) {
-    if (!on) return null;
-    if (audioProblem || filter.problem) return "problem";
-    return filter.state === "filtering" ? "filtering" : "listening";
-  }
-
-  function musicPhase(state, now) {
-    return state === "listening" ? Math.floor(now / MUSIC_STEP_MS) % 3 : null;
-  }
-
-  function retryWait(filter, now) {
-    return Math.max(0, Math.ceil(((filter.retryAt || 0) - now) / 1000));
   }
 
   // Whether the helper on this PC is older than the extension (Firefox updates the extension by itself; the helper
@@ -185,7 +168,7 @@ const Mor = (() => {
   }
 
   return { helperOutdated, isQuality, qualities, unlockedOnly, needsVpn, usherChannel, pageChannel, parseStatus, applyStatus,
-    toBase64, fromBase64, serverLabel, rowText, rowState, musicPhase, retryWait };
+    toBase64, fromBase64, serverLabel, rowText };
 })();
 
 if (typeof module !== "undefined") module.exports = Mor;

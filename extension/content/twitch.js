@@ -21,10 +21,7 @@
   let copy = null; // a song's copy on its way: {id, length, buffer, got, parts}
   let audioProblem = null;
   let filterState = { state: "listening", problem: null, step: null, retryAt: 0 }; // as the background last said
-  const row = new PlayerRow.Row({
-    onToggle: () => tell({ type: "toggle-filter" }),
-    onRetry: () => tell({ type: "retry" }),
-  });
+  const row = new PlayerRow.Row();
 
   function tell(message) {
     try { port.postMessage(message); } catch (error) { /* the background is reloading: it asks again */ }
@@ -212,7 +209,7 @@
     document.addEventListener(kind, () => { if (audioProblem && context) tick(); }, true);
   }
 
-  // the music filter's row on the player: on a channel's live stream, with Twitch's controls
+  // the music filter's row in Twitch's player controls, on a channel's live stream
   function showRow() {
     const v = channel ? playerVideo() : null;
     const container = v && v.closest(".video-player__container");
@@ -222,11 +219,8 @@
       row.remove();
       return;
     }
-    const fading = controls.closest(".tw-transition") || controls;
-    const up = Number(getComputedStyle(fading).opacity) > 0.5 && getComputedStyle(controls).visibility !== "hidden";
-    // measured against Twitch's buttons only while they show, and never under the mouse: it stays where it was
-    row.place(container, controls, group, up && !row.hovered);
-    row.update({ on: wanted, filter: filterState, audio: audioProblem }, up, Date.now());
+    row.place(group);
+    row.update({ on: wanted, filter: filterState, audio: audioProblem });
   }
 
   tell({ type: "page", channel: (channel = Mor.pageChannel(location.href)), hevc });

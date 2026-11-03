@@ -190,13 +190,24 @@ test("switching the unlock off takes tabs off the tunnel and starts their stream
   assert.strictEqual(m.stored.unlock, false);
 });
 
-test("the music filter: switched per channel, the tab's sound to the helper, the helper's news to the tab", async () => {
+test("the music filter: on for every channel at first, switched off per channel and kept", async () => {
   const m = load();
   const port = m.tab(1, "someone");
+  same(told(port).at(-1), { type: "filter", on: true });
+  const other = m.tab(2, "someone_else");
+  let state = await m.ask({ type: "toggle-filter", tabId: 1 });
+  assert.strictEqual(state.tab.filterOn, false);
+  same(m.stored.filterOff, ["someone"]);
   same(told(port).at(-1), { type: "filter", on: false });
-  const state = await m.ask({ type: "toggle-filter", tabId: 1 });
+  same(told(other).at(-1), { type: "filter", on: true }); // other channels stay on
+  state = await m.ask({ type: "toggle-filter", tabId: 1 });
   assert.strictEqual(state.tab.filterOn, true);
-  same(m.stored.filtered, ["someone"]);
+  same(m.stored.filterOff, []);
+});
+
+test("the music filter: the tab's sound to the helper, the helper's news to the tab", async () => {
+  const m = load();
+  const port = m.tab(1, "someone");
   same(told(port).at(-1), { type: "filter", on: true });
   port.onMessage.fire({ type: "filter-start", sid: "s1" });
   const native = m.natives.at(-1);
@@ -227,7 +238,6 @@ test("the music filter: switched per channel, the tab's sound to the helper, the
 test("a helper that isn't installed is said in words the user can act on", async () => {
   const m = load({ nativeFails: true });
   const port = m.tab(1, "someone");
-  await m.ask({ type: "toggle-filter", tabId: 1 });
   port.onMessage.fire({ type: "filter-start", sid: "s1" });
   const state = await m.ask({ type: "hub-state", tabId: 1 });
   assert.match(state.helper.error, /isn't installed on this PC: run Install Mor.cmd/);
@@ -237,7 +247,6 @@ test("a helper that isn't installed is said in words the user can act on", async
 test("a helper that stops is told to each tab using it", async () => {
   const m = load();
   const port = m.tab(1, "someone");
-  await m.ask({ type: "toggle-filter", tabId: 1 });
   port.onMessage.fire({ type: "filter-start", sid: "s1" });
   m.helperSays({ type: "hello", version: "0.1.0", tunnel: true, javascript: true, servers: [] });
   m.natives.at(-1).onDisconnect.fire({ error: { message: "crashed" } });
@@ -254,24 +263,6 @@ test("servers are asked of the helper and its answer handed to the hub", async (
   same(m.natives.at(-1).sent.at(-1), { type: "server-add", name: "a.conf", text: "x" });
   m.helperSays({ type: "servers", servers: ["a"], inUse: null, error: null });
   same((await reply).servers, ["a"]);
-});
-
-test("the switch and the retry on the player work like the hub's", async () => {
-  const m = load();
-  const port = m.tab(1, "someone");
-  port.onMessage.fire({ type: "toggle-filter" });
-  await tick();
-  same(m.stored.filtered, ["someone"]);
-  same(told(port).at(-1), { type: "filter", on: true });
-  port.onMessage.fire({ type: "filter-start", sid: "s1" });
-  port.onMessage.fire({ type: "retry" });
-  same(m.natives.at(-1).sent.at(-1), { type: "retry", sid: "s1" });
-  const state = port.sent.filter((x) => x.type === "state").at(-1);
-  assert.ok(state.filter.retryAt > Date.now()); // the row waits until the helper says how its budget is
-  port.onMessage.fire({ type: "toggle-filter" });
-  await tick();
-  same(m.stored.filtered, []);
-  same(told(port).at(-1), { type: "filter", on: false });
 });
 
 test("an ad blocker's backup playlists pass straight through, never held up or swapped", async () => {

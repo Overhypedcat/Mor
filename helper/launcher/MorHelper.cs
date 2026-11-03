@@ -12,8 +12,8 @@ using System.Threading;
 [assembly: AssemblyTitle("Mor Helper")]
 [assembly: AssemblyProduct("Mor")]
 [assembly: AssemblyDescription("Mor's helper for Firefox")]
-[assembly: AssemblyVersion("0.1.3.0")]
-[assembly: AssemblyFileVersion("0.1.3.0")]
+[assembly: AssemblyVersion("0.1.4.0")]
+[assembly: AssemblyFileVersion("0.1.4.0")]
 
 static class Program {
     static int Main() {
