@@ -105,6 +105,24 @@ Write-Host "Registered"
 
 Step "The extension"
 $Xpi = Get-ChildItem $Root -Filter "Mor*.xpi" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $Xpi) {
+    # the signed extension for this version of Mor, from its GitHub release (it isn't kept in the repository)
+    $Version = (Get-Content (Join-Path $Root "extension\manifest.json") -Raw | ConvertFrom-Json).version
+    try {
+        $Releases = Invoke-RestMethod -Uri "https://api.github.com/repos/Overhypedcat/Mor/releases" -UseBasicParsing
+        $Asset = $Releases | Where-Object { $_.tag_name -eq "v$Version" } | ForEach-Object { $_.assets } |
+            Where-Object { $_.name -like "*.xpi" } | Select-Object -First 1
+        if ($Asset) {
+            $Target = Join-Path $Data "Mor-$Version.xpi"
+            Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $Target -UseBasicParsing
+            $Xpi = Get-Item $Target
+        } else {
+            Write-Host "Mor $Version's signed extension isn't on GitHub yet." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "Couldn't download Mor's signed extension from GitHub: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
 $Firefox = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe" -ErrorAction SilentlyContinue).'(default)'
 if (-not $Firefox) { $Firefox = Join-Path $env:ProgramFiles "Mozilla Firefox\firefox.exe" }
 if (-not (Test-Path $Firefox)) { Fail "Firefox isn't installed" }
@@ -112,8 +130,8 @@ if ($Xpi) {
     Write-Host "Firefox opens now and asks to add Mor: press Add."
     Start-Process $Firefox -ArgumentList "`"$($Xpi.FullName)`""
 } else {
-    Write-Host "There's no signed Mor.xpi in this folder. To try Mor without one: in Firefox open about:debugging,"
-    Write-Host "This Firefox, Load Temporary Add-on, and pick extension\manifest.json (it stays until Firefox closes)."
+    Write-Host "To add the extension without it: in Firefox open about:debugging, This Firefox, Load Temporary Add-on,"
+    Write-Host "and pick extension\manifest.json (it stays until Firefox closes)."
 }
 
 Write-Host ""

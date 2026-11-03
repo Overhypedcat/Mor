@@ -62,19 +62,22 @@ Needs Windows 10 or 11 and Firefox.
 
 Running `Install Mor.cmd` again repairs or updates Mor. Nothing needs admin rights.
 
-Until Mor's first signed release, the installer sets up the helper and you add the extension yourself: open
-`about:debugging` in Firefox, choose **This Firefox > Load Temporary Add-on**, and pick `extension\manifest.json`.
-Firefox keeps it until it closes.
-
 ## Using Mor
 
-Click Mor's toolbar button on a Twitch channel:
+On a Twitch channel's live stream, the music filter has its own row on the player, next to Twitch's buttons. It
+shows up with Twitch's controls: a music note, what the filter is doing ("Listening for music", "Removing Artist -
+Song") or what went wrong, a retry button and the filter's switch for that channel.
 
-- **Music filter**: switch it on for the channel you're watching. Below the switch, Mor shows what it's doing
-  ("Listening for music", "Removing Artist - Song") or what went wrong, with a retry button.
+Mor's toolbar button opens its hub:
+
+- **Music filter**: the same switch and status as on the player.
 - **1440p unlock**: on or off for all channels. When it's on, Mor checks each live stream as it starts and shows
-  whether it's playing a locked quality through the VPN. Choose 1440p in Twitch's own quality menu.
-- **VPN servers**: the servers Mor tries, in order. **Add servers** opens a page to add `.conf` files.
+  whether it's playing a locked quality through the VPN. Choose 1440p in Twitch's own quality menu. Under **VPN
+  servers** are the servers Mor tries, in order; **Add servers** opens a page to add `.conf` files.
+
+Mor works alongside Twitch ad blockers such as TwitchAdSolutions: when one swaps or reloads the player during an ad,
+the music filter carries on with the song it was removing. While an ad blocker plays a backup stream, the 1440p
+unlock steps aside and the stream plays at the backup's quality.
 
 ### Adding Proton VPN servers
 
