@@ -7,7 +7,7 @@
 # Needs your AMO API credentials (https://addons.mozilla.org/developers/addon/api/key/). They're asked for here, or
 # read from a .amo-keys file in Mor's folder (two lines: the issuer, then the secret; git ignores the file). They're
 # only sent to Mozilla. Each version number can be signed once: raise "version" in extension\manifest.json first.
-param([switch]$Unlisted)
+param([switch]$Unlisted, [string]$Metadata)  # -Metadata: a JSON file of the version's license and reviewer notes
 $ErrorActionPreference = "Stop"
 $Channel = if ($Unlisted) { "unlisted" } else { "listed" }
 $Root = Split-Path -Parent $PSScriptRoot
@@ -41,7 +41,7 @@ $env:WEB_EXT_API_KEY = $key
 $env:WEB_EXT_API_SECRET = $secret
 New-Item -ItemType Directory -Force $Artifacts | Out-Null
 $before = @(Get-ChildItem $Artifacts -Filter *.xpi | ForEach-Object FullName)
-& npx --yes web-ext@8 sign --channel=$Channel --source-dir "$Extension" --artifacts-dir "$Artifacts" --ignore-files "tests/**" --approval-timeout 900000
+& npx --yes web-ext@8 sign --channel=$Channel --source-dir "$Extension" --artifacts-dir "$Artifacts" --ignore-files "tests/**" --approval-timeout 900000 @(if ($Metadata) { "--amo-metadata", $Metadata })
 $code = $LASTEXITCODE
 Remove-Item Env:WEB_EXT_API_KEY, Env:WEB_EXT_API_SECRET -ErrorAction SilentlyContinue
 if ($code -ne 0) {

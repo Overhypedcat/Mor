@@ -52,7 +52,7 @@ Photos, Music & Videos (also: Other, if a second is allowed)
 
 ## Tags
 
-twitch, music, streaming, video quality, vpn
+twitch, music, streaming, vpn
 
 ## Support
 
