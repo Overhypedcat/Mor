@@ -7,6 +7,7 @@ through the VPN (unlock.py), and the VPN servers' list. Anything that goes wrong
 """
 import json
 import logging
+import logging.handlers
 import struct
 import sys
 import threading
@@ -149,8 +150,12 @@ class Host:
 def main():
     folder = paths.local()
     folder.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(filename=folder / "helper.log", level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(message)s")
+    # what the helper did, step by step, for reports: kept to a few MB (the oldest part goes first)
+    handler = logging.handlers.RotatingFileHandler(folder / "helper.log", maxBytes=1_000_000, backupCount=2,
+                                                   encoding="utf-8")
+    logging.basicConfig(handlers=[handler], level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    for name in ("shazamio", "shazamio_core"):  # (a line per request, saying nothing)
+        logging.getLogger(name).setLevel(logging.WARNING)
     log.info("started %s", VERSION)
     try:
         Host(sys.stdin.buffer, sys.stdout.buffer).run()

@@ -91,3 +91,55 @@ class SessionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LogTests(unittest.TestCase):
+    """What the filter did, step by step, is in the helper's log, for reports."""
+
+    def test_steps_problems_copies_and_places_are_logged_but_not_the_countdown(self):
+        sent = []
+        tracker_holder = {}
+
+        class Tracker(FakeTracker):
+            def __init__(self, *a, **k):
+                super().__init__(*a, **k)
+                tracker_holder["t"] = self
+
+            def _copy(self, video_id):
+                return "sound"
+
+        session = FilterSession("tab1", sent.append, relay.Budget(lambda: 0.0), library=object(),
+                                tracker_factory=Tracker)
+        with self.assertLogs("mor.filter", level="INFO") as logs:
+            session.teller.step("Lining up A - B")
+            session.teller.report("Shazam is down")
+            session.teller.ready(12)
+            self.assertEqual(tracker_holder["t"]._copy("vid9"), "sound")  # still does what it did
+            tracker_holder["t"].playing = relay.Playing(Song("k", "B", "A"), np.zeros((2, 4), np.int16), None, 77,
+                                                        "vid9", 1)
+            session.tell_playing()
+        text = "\n".join(logs.output)
+        self.assertIn("tab1 step Lining up A - B", text)
+        self.assertIn("tab1 problem Shazam is down", text)
+        self.assertIn("tab1 trying YouTube copy vid9", text)
+        self.assertIn("tab1 taking out A - B (copy vid9, song sample 77 at stream sample 0, round 1)", text)
+        self.assertNotIn("ready", text)
+        self.assertTrue(any(m.get("line") == "ready 12" for m in sent))  # the tab still hears the countdown
+
+
+class AlignmentLogTests(unittest.TestCase):
+    """How sure each try at lining up was is logged; what lining up finds stays the same."""
+
+    def test_a_copy_that_doesnt_line_up_says_how_sure_it_was(self):
+        from mor_helper.musicfilter import align
+        rng = np.random.default_rng(3)
+        song = rng.standard_normal(48000 * 20).astype(np.float32)
+        noise = rng.standard_normal(48000 * 6).astype(np.float32)
+        with self.assertLogs("mor.filter", level="INFO") as logs:
+            found = align.find(song[48000 * 5: 48000 * 11], song)
+            missing = align.find(noise, song)
+        self.assertEqual(found[0], 48000 * 5)  # lined up exactly, as without the log
+        self.assertIsNone(missing[0])
+        self.assertIn("lining up: found (sure", logs.output[0])
+        self.assertIn("lining up: not found (sure", logs.output[1])
+        self.assertIn("14.0 counts", logs.output[1])

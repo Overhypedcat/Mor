@@ -5,6 +5,7 @@ and its place, and the tab gets back the song's copy and each new place (Playing
 The tab subtracts; this side never holds up the sound.
 """
 import base64
+import logging
 import threading
 import time
 
@@ -14,6 +15,34 @@ from mor_helper.musicfilter import relay, songs, status
 
 CHUNK = 512 * 1024  # bytes of a song's copy per message: native messages to Firefox stay under 1 MB
 WATCH_S = 0.01  # how often the Tracker's .playing is looked at, to tell the tab as soon as it changes
+log = logging.getLogger("mor.filter")
+
+
+def _log_alignment():
+    """Each try at lining a copy up with the stream, with how sure it was against what counts (align.SURE, or
+    STILL_SURE when following a song), in the log: the reason a copy didn't line up. The results are untouched."""
+    align = relay.align
+    if getattr(align.find, "logged", False):
+        return
+    find, still = align.find, align.still
+
+    def logged_find(stream, song, reduced_song=None, expected=None):
+        at, score = find(stream, song, reduced_song, expected)
+        log.info("lining up: %s (sure %.1f, %.1f counts)", "found" if at is not None else "not found", score,
+                 align.SURE)
+        return at, score
+
+    def logged_still(stream, song, reduced_song, expected, reach=align.REACH):
+        at, score = still(stream, song, reduced_song, expected, reach)
+        if at is None:
+            log.info("following: not where it was (sure %.1f, %.1f counts)", score, align.STILL_SURE)
+        return at, score
+
+    logged_find.logged = True
+    align.find, align.still = logged_find, logged_still
+
+
+_log_alignment()
 
 
 class FilterSession:
@@ -21,22 +50,42 @@ class FilterSession:
         """send(message dict) goes to the extension; budget is Shazam's, shared by every tab (one connection)."""
         self.sid, self.send = sid, send
         self.heard = relay.Heard()
-        self.teller = status.Server(lambda text: self.send({"type": "status", "sid": sid, "line": text}))
+        self.teller = status.Server(self._tell)
         self.tracker = tracker_factory(self.heard, library or songs.Library(), self.teller.set, self.teller.report,
                                        on_ready=self.teller.ready, on_step=self.teller.step, clock=clock)
         self.tracker.budget = budget
+        self._log_copies()
         self.stopped = threading.Event()
         self.sent_copy = None  # the YouTube id of the copy the tab holds
         self.told = None  # the Playing the tab was last told
         self.seq = 0
 
+    def _tell(self, text):
+        """A status line to the tab, and (but Shazam's countdown) to the log: what the filter did, step by step."""
+        if not text.startswith(status.READY):
+            log.info("%s %s", self.sid, text)
+        self.send({"type": "status", "sid": self.sid, "line": text})
+
+    def _log_copies(self):
+        """Which YouTube copy each try fetched and lined up, in the log (the Tracker's own steps name only the song)."""
+        copy = getattr(self.tracker, "_copy", None)
+        if copy is None:
+            return
+
+        def logged(video_id):
+            log.info("%s trying YouTube copy %s", self.sid, video_id)
+            return copy(video_id)
+        self.tracker._copy = logged
+
     def start(self):
+        log.info("%s filter started", self.sid)
         self.teller.tell(status.line(status.LISTENING))
         self.tracker._tell_ready()  # the tab knows from the start whether a retry can go
         threading.Thread(target=self._think, daemon=True).start()
         threading.Thread(target=self._watch, daemon=True).start()
 
     def stop(self):
+        log.info("%s filter stopped", self.sid)
         self.stopped.set()
 
     def hear(self, data):
@@ -76,6 +125,11 @@ class FilterSession:
             self.send_copy(playing.video_id or "", playing.sound)
             self.sent_copy = playing.video_id
         self.seq += 1
+        if playing is None:
+            log.info("%s nothing to take out", self.sid)
+        else:
+            log.info("%s taking out %s (copy %s, song sample %d at stream sample 0, round %d)", self.sid,
+                     playing.song, playing.video_id, playing.offset, playing.round)
         message = {"type": "playing", "sid": self.sid, "seq": self.seq, "playing": None}
         if playing is not None:
             message["playing"] = {"key": playing.song.key, "title": playing.song.title, "artist": playing.song.artist,
