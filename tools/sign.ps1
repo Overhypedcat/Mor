@@ -44,6 +44,11 @@ if ($code -ne 0) { Fail "web-ext stopped with code $code (its message is above).
 $signed = Get-ChildItem $Artifacts -Filter *.xpi | Where-Object { $before -notcontains $_.FullName } |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $signed) { Fail "Mozilla didn't hand back a signed file" }
-Copy-Item $signed.FullName (Join-Path $Root "Mor.xpi") -Force
+try {
+    Copy-Item $signed.FullName (Join-Path $Root "Mor.xpi") -Force
+} catch {
+    Fail ("Mozilla signed it, but Mor.xpi couldn't be replaced (" + $_.Exception.Message.Trim() + "). Firefox may " +
+          "have the old one open: close its install prompt, then copy $($signed.FullName) to Mor.xpi")
+}
 Write-Host ""
 Write-Host "Signed: Mor.xpi is ready. Run Install Mor.cmd (or open Mor.xpi in Firefox) to install it." -ForegroundColor Green
