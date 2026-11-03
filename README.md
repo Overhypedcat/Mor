@@ -32,19 +32,17 @@ the extension: it has no window, starts only while the extension needs it, and s
 - When the VPN offers nothing more than your normal connection, the stream plays normally and nothing goes through
   the VPN.
 
-## Heads-up: antivirus false positives
+## Heads-up
 
-Mor is new, and the helper is built on your PC when you install it, so your antivirus has never seen it before. Some
-antivirus programs flag new, unknown programs like this one as suspicious (a false positive), especially
-`MorHelper.exe` and `wireproxy.exe` (the open-source WireGuard tunnel Mor uses for the 1440p unlock, downloaded from
-its official GitHub release and checked against its published checksum). The full source is in this repository. If
-your antivirus blocks a part of Mor, Mor says which part failed, and you can allow it in your antivirus.
-
-## Heads-up: it isn't perfect
-
+- **Your antivirus may flag Mor (a false positive).** Mor is new, and its helper is built on your PC when you install
+  it, so your antivirus has never seen it before. Some antivirus programs flag new, unknown programs like this as
+  suspicious, especially `MorHelper.exe` and `wireproxy.exe` (the open-source WireGuard tunnel Mor uses for the 1440p
+  unlock, downloaded from its official GitHub release and checked against its published checksum). The full source is
+  in this repository. If your antivirus blocks a part of Mor, Mor says which part failed, and you can allow it in your
+  antivirus.
 - **Some songs won't be removed.** Niche songs that Shazam doesn't know, or that aren't on YouTube Music or YouTube in
-  the version the streamer plays (remixes, sped-up versions, live versions), stay audible. Mor says so in its hub when
-  it happens.
+  the version the streamer plays (remixes, sped-up versions, live versions), stay audible. Mor says so on the player
+  when it happens.
 - **Loud music can leave artifacts.** Twitch re-encodes each stream's audio, which changes the song in ways that can't
   be fully known and reversed. When the music is loud, faint traces or a slightly watery sound can remain where the
   song was.
@@ -54,7 +52,8 @@ your antivirus blocks a part of Mor, Mor says which part failed, and you can all
 
 Needs Windows 10 or 11 and Firefox.
 
-1. Download Mor: **Code > Download ZIP** on GitHub (then unzip it), or `git clone` this repository.
+1. Download Mor from the [latest release](https://github.com/Overhypedcat/Mor/releases) (**Source code (zip)**)
+   and unzip it.
 2. Double-click **`Install Mor.cmd`**.
    It sets up everything the helper needs (Python and Node.js are installed with winget if they're missing) and
    then opens Firefox to add the extension: press **Add**.
