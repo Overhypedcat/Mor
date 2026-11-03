@@ -133,6 +133,11 @@ helper\.venv\Scripts\python extension\tests\fixtures\make_filter_fixture.py   # 
 - `helper/`: the helper (Python). `mor_helper/musicfilter/` recognizes, fetches and lines up the songs;
   `mor_helper/unlock.py` and `vpn.py` ask Twitch through the VPN tunnel.
 - `tools/install.ps1`: what `Install Mor.cmd` runs.
+- `tools/sign.cmd`: has Mozilla sign the extension for self-distribution (unlisted on addons.mozilla.org) and puts
+  the signed `Mor.xpi` beside `Install Mor.cmd`. Needs AMO API credentials
+  ([addons.mozilla.org/developers/addon/api/key](https://addons.mozilla.org/developers/addon/api/key/)), asked for
+  when it runs or read from a git-ignored `.amo-keys` file. Raise `version` in `extension/manifest.json` before each
+  new signing: Mozilla signs each version once.
 
 The song removal in the tab is tested sample for sample against the helper's Python reference.
 
