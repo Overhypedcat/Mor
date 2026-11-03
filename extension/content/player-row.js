@@ -16,6 +16,17 @@ const PlayerRow = (() => {
     .text.problem { color: #ff6b7a; }
   `;
 
+  // Whether an element takes room in the bar (Twitch keeps empty ones in its groups).
+  function shows(element) {
+    const r = element.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  // Whether a comes before b among the same parent's children.
+  function precedes(a, b) {
+    return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }
+
   class Row {
     constructor() {
       this.host = document.createElement("div");
@@ -29,9 +40,16 @@ const PlayerRow = (() => {
       this.drawn = undefined;
     }
 
-    // Puts the text first among Twitch's buttons on the right (again whenever Twitch renders its controls afresh).
+    // Puts the text left of every button on the right of Twitch's controls: Twitch's own, and those other extensions
+    // add there (7TV's, ...), whichever came first. Moved back there when Twitch renders its controls afresh or
+    // something is added in front of it; Twitch's empty placeholders don't count.
     place(rightGroup) {
-      if (this.host.parentElement !== rightGroup) rightGroup.prepend(this.host);
+      const first = [...rightGroup.children].find((child) => child !== this.host && shows(child));
+      if (first) {
+        if (this.host.parentElement !== rightGroup || !precedes(this.host, first)) rightGroup.insertBefore(this.host, first);
+      } else if (this.host.parentElement !== rightGroup) {
+        rightGroup.prepend(this.host);
+      }
     }
 
     remove() {
