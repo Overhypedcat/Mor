@@ -108,7 +108,7 @@ Everything Mor keeps stays on your PC. There's no Mor account, no Mor server, no
   leave the stream or close Firefox. It never changes your PC's network settings (no system VPN, no admin rights).
 - **What goes out to the internet**: short clips of the stream's sound (about 10 seconds) to Shazam to name the song;
   searches and song downloads from YouTube Music and YouTube; and Twitch's own requests. Nothing else.
-- **What's kept on disk**: clean song copies for the music filter in `%LOCALAPPDATA%\Mor\music` (at most 300 MB, the
+- **What's kept on disk**: clean song copies for the music filter in `%LOCALAPPDATA%\Mor\music` (at most 1 GB, the
   oldest removed first), the tunnel program in `%LOCALAPPDATA%\Mor\bin`, and a short helper log in
   `%LOCALAPPDATA%\Mor\helper.log`.
 - **The helper** is registered with Firefox for Mor's extension only (Firefox's native messaging: only the extension

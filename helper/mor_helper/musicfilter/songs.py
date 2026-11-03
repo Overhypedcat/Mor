@@ -25,7 +25,7 @@ CANDIDATES = 3  # each search's top results tried for a match, in order
 # where a song's copy is looked for, in order: YouTube Music's songs are the album recordings streamers play; YouTube
 # has what it hasn't (music videos, lyric uploads, sped-up and remixed versions, game soundtracks, smaller artists)
 SOURCES = ("YouTube Music", "YouTube")
-KEEP_BYTES = 300 * 1024 * 1024  # the copies and their prints, all told
+KEEP_BYTES = 1024 * 1024 * 1024  # the copies and their prints, all told (1 GB)
 INDEX_MAX = 2000  # songs remembered in the index (a few dozen bytes each), the latest kept
 PRINT = ".print.npy"  # a copy's print, beside it
 ASK_S = 10  # one try at asking Shazam, at most this long: the filter asks again on its own a few seconds later

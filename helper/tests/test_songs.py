@@ -217,3 +217,8 @@ class LoadTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KeepTests(unittest.TestCase):
+    def test_up_to_a_gigabyte_of_copies_is_kept(self):
+        self.assertEqual(songs.KEEP_BYTES, 1024 ** 3)
