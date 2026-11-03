@@ -28,7 +28,7 @@ html, body {
 
 body { width: 360px; padding: 12px; }
 body.page { width: auto; max-width: 480px; margin: 32px auto; padding: 16px; }
-body.page #filter-card, body.page #unlock-card { display: none; }
+body.page #filter-card { display: none; }
 
 .top { display: flex; align-items: center; gap: 10px; padding: 2px 4px 12px; }
 .logo { width: 28px; height: 28px; }
@@ -106,6 +106,12 @@ h2 { font-size: 13px; font-weight: 650; margin: 0; }
 .button.primary { background: var(--accent); }
 .button.primary:hover { background: var(--accent-hover); }
 
+.drawer { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.drawer > summary { cursor: pointer; color: var(--text); font-weight: 600; list-style: none; display: flex; align-items: center; }
+.drawer > summary::-webkit-details-marker { display: none; }
+.drawer > summary::before { content: "›"; display: inline-block; width: 14px; color: var(--muted); transition: transform .15s; }
+.drawer[open] > summary::before { transform: rotate(90deg); }
+.drawer > .sub { margin-top: 8px; }
 .guide { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
 .guide summary { cursor: pointer; color: var(--accent-hover); font-weight: 600; list-style: none; }
 .guide summary::-webkit-details-marker { display: none; }

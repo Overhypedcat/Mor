@@ -132,10 +132,14 @@ function renderServers() {
     list.append(li);
   }
   show($("servers-empty"), servers.length === 0);
+  $("servers-summary").textContent = servers.length
+    ? `VPN servers (${servers.length})` : "VPN servers: none yet";
   $("servers-error").textContent = serverError || "";
   show($("servers-error"), Boolean(serverError));
   if (serversKnown && !guideOpened) {
+    // with no servers, the drawer and its guide open by themselves: that's what's needed next
     $("guide").open = servers.length === 0;
+    $("servers-drawer").open = isPage || servers.length === 0;
     guideOpened = true;
   }
 }

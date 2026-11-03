@@ -20,6 +20,11 @@
   let sid = null;
   let copy = null; // a song's copy on its way: {id, length, buffer, got, parts}
   let audioProblem = null;
+  let filterState = { state: "listening", problem: null, step: null, retryAt: 0 }; // as the background last said
+  const row = new PlayerRow.Row({
+    onToggle: () => tell({ type: "toggle-filter" }),
+    onRetry: () => tell({ type: "retry" }),
+  });
 
   function tell(message) {
     try { port.postMessage(message); } catch (error) { /* the background is reloading: it asks again */ }
@@ -94,6 +99,22 @@
     tell({ type: "filter-start", sid });
   }
 
+  // The same channel's stream in another video element (an ad blocker swapping or reloading the player): the
+  // filter carries on with it, the song it's taking out and what it learned of the streamer's sound included. It
+  // finds the song's new place in the copy it has; Shazam is only asked when the song isn't anywhere in it.
+  function moveFilter(v) {
+    const before = sources.get(video);
+    if (before) {
+      before.disconnect();
+      before.connect(context.destination);
+    }
+    const source = sourceOf(v);
+    source.disconnect();
+    source.connect(node);
+    video = v;
+    node.port.postMessage({ type: "paused", paused: v.paused });
+  }
+
   function stopFilter() {
     if (sid) tell({ type: "filter-stop", sid });
     sid = null;
@@ -146,6 +167,8 @@
       if (!wanted) stopFilter();
       else if (message.restart) stopFilter();
       tick();
+    } else if (message.type === "state") {
+      filterState = message.filter;
     } else if (message.type === "copy" && message.sid === sid) {
       onCopyPart(message);
     } else if (message.type === "playing" && message.sid === sid && node) {
@@ -164,6 +187,10 @@
     const v = playerVideo();
     if (!v) return;
     if (v === video && sid) return;
+    if (sid && node) {
+      moveFilter(v);
+      return;
+    }
     if (starting) return;
     starting = true;
     try {
@@ -185,6 +212,23 @@
     document.addEventListener(kind, () => { if (audioProblem && context) tick(); }, true);
   }
 
+  // the music filter's row on the player: on a channel's live stream, with Twitch's controls
+  function showRow() {
+    const v = channel ? playerVideo() : null;
+    const container = v && v.closest(".video-player__container");
+    const controls = container && container.querySelector(".player-controls");
+    const group = controls && controls.querySelector(".player-controls__right-control-group");
+    if (!group) {
+      row.remove();
+      return;
+    }
+    row.place(container, controls, group);
+    const fading = controls.closest(".tw-transition") || controls;
+    const up = Number(getComputedStyle(fading).opacity) > 0.5 && getComputedStyle(controls).visibility !== "hidden";
+    row.update({ on: wanted, filter: filterState, audio: audioProblem }, up, Date.now());
+  }
+
   tell({ type: "page", channel: (channel = Mor.pageChannel(location.href)), hevc });
   setInterval(tick, 500);
+  setInterval(showRow, 100);
 })();

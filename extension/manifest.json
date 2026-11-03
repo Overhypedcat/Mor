@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Mor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Twitch music filter and 1440p unlock: takes the songs streamers play out of the sound, and plays region-locked 1440p streams through your own VPN.",
   "browser_specific_settings": {
     "gecko": {
@@ -38,7 +38,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.twitch.tv/*", "https://m.twitch.tv/*", "https://player.twitch.tv/*"],
-      "js": ["lib/shared.js", "content/twitch.js"],
+      "js": ["lib/shared.js", "content/player-row.js", "content/twitch.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

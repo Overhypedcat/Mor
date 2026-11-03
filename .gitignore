@@ -4,3 +4,5 @@ __pycache__/
 helper/MorHelper.exe
 web-ext-artifacts/
 .amo-keys
+Mor.xpi
+extension/.amo-upload-uuid

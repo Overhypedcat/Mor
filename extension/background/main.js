@@ -15,6 +15,9 @@ const settings = { filtered: [], unlock: true };
 const tabs = new Map(); // tabId -> {port, channel, hevc, sid, filter: {...}, audio, unlock: {...}}
 const sids = new Map(); // music filter session -> tabId
 const vpnTabs = new Map(); // tabId -> {channel, port (socks), server, extra}
+// tabId -> the channel whose stream the unlock already decided on, in the page that's open: later playlist asks for
+// it (an ad blocker's backup streams, the player starting over) go through untouched, never held up
+const decided = new Map();
 
 // settings
 
@@ -141,7 +144,10 @@ function onHelperMessage(message) {
       break;
     case "status": {
       const tab = tabs.get(sids.get(message.sid));
-      if (tab && tab.sid === message.sid) tab.filter = Mor.applyStatus(tab.filter, message.line, Date.now());
+      if (tab && tab.sid === message.sid) {
+        tab.filter = Mor.applyStatus(tab.filter, message.line, Date.now());
+        tellState(tab);
+      }
       break;
     }
     case "copy":
@@ -150,6 +156,7 @@ function onHelperMessage(message) {
       if (tab && tab.sid === message.sid) tab.port.postMessage(message);
       if (message.type === "playing" && tab && tab.sid === message.sid) {
         tab.filter = { ...tab.filter, playing: message.playing ? songName(message.playing) : null };
+        tellState(tab);
       }
       break;
     }
@@ -175,6 +182,13 @@ function onHelperMessage(message) {
   }
 }
 
+// The music filter's state, for the row on the tab's player.
+function tellState(tab) {
+  try {
+    tab.port.postMessage({ type: "state", filter: tab.filter });
+  } catch (error) { /* the page is going away */ }
+}
+
 function songName(playing) {
   return playing.artist ? `${playing.artist} - ${playing.title}` : playing.title;
 }
@@ -185,6 +199,7 @@ function onHelperGone(wasUp) {
   for (const [tabId, tab] of tabs) {
     if (tab.sid) {
       tab.filter = { ...tab.filter, problem: helper.error || "Mor's helper stopped", state: "listening", playing: null };
+      tellState(tab);
       tab.port.postMessage({ type: "playing", sid: tab.sid, seq: -1, playing: null });
       sids.delete(tab.sid);
       tab.sid = null;
@@ -228,6 +243,7 @@ function onTabMessage(tabId, tab, message) {
   switch (message.type) {
     case "page":
       if (message.channel !== tab.channel) {
+        if (decided.get(tabId) !== message.channel) decided.delete(tabId);
         tab.channel = message.channel;
         tab.unlock = null;
         if (vpnTabs.has(tabId) && vpnTabs.get(tabId).channel !== message.channel) leaveTunnel(tabId);
@@ -243,6 +259,7 @@ function onTabMessage(tabId, tab, message) {
       if (!helper.post({ type: "filter-start", sid: message.sid })) {
         tab.filter.problem = helper.error;
       }
+      tellState(tab);
       break;
     case "filter-stop":
       if (tab.sid === message.sid) endFilter(tab);
@@ -256,11 +273,18 @@ function onTabMessage(tabId, tab, message) {
     case "broken":
       if (tab.sid === message.sid) {
         tab.filter = { ...tab.filter, problem: message.text };
+        tellState(tab);
         helper.post({ type: "broken", sid: message.sid, text: message.text });
       }
       break;
     case "audio":
       tab.audio = message.problem || null;
+      break;
+    case "toggle-filter": // the switch on the player
+      toggleFilter(tab);
+      break;
+    case "retry": // the retry on the player
+      retryFilter(tab);
       break;
     default:
       break;
@@ -273,10 +297,35 @@ function endFilter(tab) {
   if (helper.port) helper.post({ type: "filter-stop", sid: tab.sid });
   tab.sid = null;
   tab.filter = freshFilter();
+  tellState(tab);
+}
+
+// The music filter on or off for the tab's channel, kept for next time; every tab on that channel follows.
+function toggleFilter(tab) {
+  if (!tab || !tab.channel) return Promise.resolve();
+  const list = settings.filtered.filter((c) => c !== tab.channel);
+  if (!filterOn(tab.channel)) list.push(tab.channel);
+  settings.filtered = list;
+  for (const t of tabs.values()) if (t.channel) t.port.postMessage({ type: "filter", on: filterOn(t.channel) });
+  return saveSettings();
+}
+
+// The retry: the filter forgets the song and asks Shazam afresh. False when it can't be sent.
+function retryFilter(tab) {
+  if (!tab || !tab.sid) return false;
+  if (!helper.post({ type: "retry", sid: tab.sid })) {
+    tab.filter = { ...tab.filter, problem: "Couldn't reach the music filter to retry" };
+    tellState(tab);
+    return false;
+  }
+  tab.filter = { ...tab.filter, retryAt: Date.now() + 3000 }; // until the helper says how its budget is
+  tellState(tab);
+  return true;
 }
 
 // The tab went to another channel, or off Twitch: its stream no longer goes through the tunnel.
 browser.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.url && Mor.pageChannel(change.url) !== decided.get(tabId)) decided.delete(tabId);
   const entry = vpnTabs.get(tabId);
   if (entry && change.url && Mor.pageChannel(change.url) !== entry.channel) leaveTunnel(tabId);
 }, { properties: ["url"] });
@@ -285,6 +334,7 @@ browser.tabs.onRemoved.addListener((tabId) => {
   const tab = tabs.get(tabId);
   if (tab) endFilter(tab);
   tabs.delete(tabId);
+  decided.delete(tabId);
   leaveTunnel(tabId);
 });
 
@@ -322,6 +372,8 @@ browser.webRequest.onBeforeRequest.addListener((details) => {
     leaveTunnel(details.tabId);
     return {};
   }
+  if (decided.get(details.tabId) === channel) return {}; // decided once for this stream: the rest pass
+  decided.set(details.tabId, channel);
   const filter = browser.webRequest.filterResponseData(details.requestId);
   const parts = [];
   const answer = decideUnlock(details, channel);
@@ -341,6 +393,12 @@ browser.webRequest.onBeforeRequest.addListener((details) => {
   };
   return {};
 }, { urls: ["https://usher.ttvnw.net/*"] }, ["blocking"]);
+
+// A page loading in the tab is a new player: its stream is decided afresh.
+browser.webRequest.onBeforeRequest.addListener((details) => {
+  decided.delete(details.tabId);
+  return {};
+}, { urls: ["*://*.twitch.tv/*"], types: ["main_frame"] });
 
 // The swapped playlist has another length than Twitch's: its stated length goes, so nothing is cut off.
 browser.webRequest.onHeadersReceived.addListener((details) => {
@@ -447,13 +505,7 @@ browser.runtime.onMessage.addListener((message) => {
     case "toggle-filter": {
       const tab = tabs.get(message.tabId);
       if (!tab || !tab.channel) return Promise.resolve(null);
-      const list = settings.filtered.filter((c) => c !== tab.channel);
-      if (!filterOn(tab.channel)) list.push(tab.channel);
-      settings.filtered = list;
-      return saveSettings().then(() => {
-        for (const t of tabs.values()) if (t.channel) t.port.postMessage({ type: "filter", on: filterOn(t.channel) });
-        return hubState(message.tabId);
-      });
+      return toggleFilter(tab).then(() => hubState(message.tabId));
     }
     case "toggle-unlock":
       settings.unlock = !settings.unlock;
@@ -467,13 +519,8 @@ browser.runtime.onMessage.addListener((message) => {
         }
         return hubState(message.tabId);
       });
-    case "retry": {
-      const tab = tabs.get(message.tabId);
-      if (!tab || !tab.sid) return Promise.resolve(false);
-      if (!helper.post({ type: "retry", sid: tab.sid })) return Promise.resolve(false);
-      tab.filter = { ...tab.filter, retryAt: Date.now() + 3000 }; // until the helper says how its budget is
-      return Promise.resolve(true);
-    }
+    case "retry":
+      return Promise.resolve(retryFilter(tabs.get(message.tabId)));
     case "servers":
       return helper.askServers({ type: "servers" });
     case "server-add":

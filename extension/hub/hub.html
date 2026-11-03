@@ -45,15 +45,9 @@
       <span class="dot" id="unlock-dot"></span>
       <p id="unlock-text"></p>
     </div>
-  </section>
-
-  <section class="card" id="servers-card">
-    <div class="row">
-      <div class="title">
-        <h2>VPN servers</h2>
-        <p class="sub">Tried in this order; the first that works is used.</p>
-      </div>
-    </div>
+    <details class="drawer" id="servers-drawer">
+      <summary id="servers-summary">VPN servers</summary>
+      <p class="sub">Tried in this order; the first that works is used.</p>
     <ul class="servers" id="servers"></ul>
     <p class="empty" id="servers-empty" hidden>No servers yet</p>
     <p class="alert small" id="servers-error" hidden></p>
@@ -73,6 +67,7 @@
         <li>Here, press <b>Add servers</b> and choose the .conf files.</li>
       </ol>
       <p class="note">The free plan allows one connection at a time: while Mor uses a server, keep the Proton app disconnected.</p>
+    </details>
     </details>
   </section>
 

@@ -97,3 +97,26 @@ test("server names", () => {
   assert.deepStrictEqual(Mor.serverLabel("wg-NL-FREE-102"), ["NL", "Netherlands · Free 102"]);
   assert.deepStrictEqual(Mor.serverLabel("my server"), ["", "my server"]);
 });
+
+test("what the player's row says and shows", () => {
+  const filter = { state: "listening", problem: null, step: null, retryAt: 0 };
+  assert.deepStrictEqual(Mor.rowText(false, filter, null), { text: "Off", problem: false });
+  assert.deepStrictEqual(Mor.rowText(true, filter, null), { text: "Listening for music", problem: false });
+  assert.deepStrictEqual(Mor.rowText(true, { ...filter, state: "filtering" }, null), { text: "Removing the song", problem: false });
+  assert.deepStrictEqual(Mor.rowText(true, { ...filter, step: "Getting A - B" }, null), { text: "Getting A - B", problem: false });
+  assert.deepStrictEqual(Mor.rowText(true, { ...filter, step: "x", problem: "Shazam is down" }, null), { text: "Shazam is down", problem: true });
+  assert.deepStrictEqual(Mor.rowText(true, filter, "Click the stream once"), { text: "Click the stream once", problem: true });
+  assert.strictEqual(Mor.rowState(false, filter, null), null);
+  assert.strictEqual(Mor.rowState(true, filter, null), "listening");
+  assert.strictEqual(Mor.rowState(true, { ...filter, state: "filtering" }, null), "filtering");
+  assert.strictEqual(Mor.rowState(true, { ...filter, state: "filtering", problem: "p" }, null), "problem");
+});
+
+test("the listening dots step, only while listening; the retry counts down", () => {
+  assert.deepStrictEqual([0, 300, 600, 900].map((t) => Mor.musicPhase("listening", t)), [0, 1, 2, 0]);
+  assert.strictEqual(Mor.musicPhase("filtering", 300), null);
+  assert.strictEqual(Mor.musicPhase(null, 300), null);
+  assert.strictEqual(Mor.retryWait({ retryAt: 10500 }, 1000), 10);
+  assert.strictEqual(Mor.retryWait({ retryAt: 500 }, 1000), 0);
+  assert.strictEqual(Mor.retryWait({}, 1000), 0);
+});
