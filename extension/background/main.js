@@ -53,19 +53,28 @@ const helper = {
       port = browser.runtime.connectNative(HELPER);
     } catch (error) {
       this.error = describeHelperError(error.message);
+      this.missing = isMissing(error.message);
       return null;
     }
     this.port = port;
     this.error = null;
-    port.onMessage.addListener((message) => onHelperMessage(message));
+    port.onMessage.addListener((message) => {
+      this.missing = false;
+      onHelperMessage(message);
+    });
     port.onDisconnect.addListener((p) => {
       const why = p.error ? p.error.message : null;
       const wasUp = Boolean(this.hello);
       this.port = null;
       this.hello = null;
       this.error = why ? describeHelperError(why) : (this.letGo ? null : "Mor's helper stopped");
+      this.missing = isMissing(why);
       this.letGo = false;
       onHelperGone(wasUp);
+      if (this.missing && justInstalled) {
+        justInstalled = false;
+        openSetup(); // installed without its helper: shown how to set it up, once, right away
+      }
     });
     port.postMessage({ type: "hello" });
     this.touch();
@@ -131,9 +140,27 @@ const helper = {
   },
 };
 
+// Firefox found no helper registered for Mor: it isn't installed on this PC (only the extension is).
+function isMissing(text) {
+  return /no such native application|not found|manifest/i.test(text || "");
+}
+
+let justInstalled = false; // the extension was just installed: a missing helper opens the setup page
+
+function openSetup() {
+  browser.tabs.create({ url: browser.runtime.getURL("hub/hub.html?page") });
+}
+
+browser.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== "install") return;
+  justInstalled = true;
+  helper.connect(); // a missing helper answers at once, and the setup page opens
+  helper.touch();
+});
+
 function describeHelperError(text) {
-  if (/no such native application|not found|manifest/i.test(text || "")) {
-    return "Mor's helper isn't installed on this PC: run Install Mor.cmd from Mor's folder";
+  if (isMissing(text)) {
+    return "Mor needs its helper on this PC: click Mor's button in the toolbar to set it up";
   }
   return `Mor's helper stopped: ${text}`;
 }
@@ -474,6 +501,7 @@ async function hubState(tabId) {
   } catch (error) { /* the tab is gone */ }
   return {
     helper: { connected: Boolean(helper.port && helper.hello), error: helper.error, lastError: helper.lastError,
+      missing: Boolean(helper.missing),
       version: helper.hello ? helper.hello.version : null, tunnel: helper.hello ? helper.hello.tunnel : null,
       javascript: helper.hello ? helper.hello.javascript : null },
     servers: helper.hello ? helper.hello.servers : [],
@@ -497,6 +525,9 @@ browser.runtime.onMessage.addListener((message) => {
   switch (message.type) {
     case "hub-state":
       return hubState(message.tabId);
+    case "helper-check": // the setup card's "Check again": the helper may have just been installed
+      if (!helper.port) helper.connect();
+      return new Promise((resolve) => setTimeout(() => resolve(hubState(message.tabId)), 1500));
     case "toggle-filter": {
       const tab = tabs.get(message.tabId);
       if (!tab || !tab.channel) return Promise.resolve(null);

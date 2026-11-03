@@ -29,11 +29,15 @@ function show(el, visible) { el.hidden = !visible; }
 
 function renderHelper() {
   const h = state.helper;
+  // without its helper, nothing else works: the hub shows how to set it up instead
+  show($("setup"), Boolean(h.missing));
+  for (const id of ["filter-card", "unlock-card"]) show($(id), !h.missing);
   const el = $("helper");
-  el.className = "helper " + (h.connected ? "up" : h.error ? "down" : "");
-  el.textContent = h.connected ? "Helper running" : h.error ? "Helper stopped" : "Starting helper";
+  el.className = "helper " + (h.connected ? "up" : h.error || h.missing ? "down" : "");
+  el.textContent = h.connected ? "Helper running" : h.missing ? "Helper not installed"
+    : h.error ? "Helper stopped" : "Starting helper";
   const problems = [];
-  if (h.error) problems.push(h.error);
+  if (h.error && !h.missing) problems.push(h.error);
   if (h.connected && h.javascript === false) {
     problems.push("Getting songs from YouTube needs Node.js: run Install Mor.cmd again");
   }
@@ -180,6 +184,15 @@ async function serversReply(promise) {
   serversKnown = true;
   render();
 }
+
+$("setup-check").addEventListener("click", async () => {
+  $("setup-check").disabled = true;
+  $("setup-check").textContent = "Checking";
+  state = await browser.runtime.sendMessage({ type: "helper-check", tabId }) || state;
+  $("setup-check").disabled = false;
+  $("setup-check").textContent = state.helper.missing ? "Still not found, check again" : "Check again";
+  render();
+});
 
 $("filter-switch").addEventListener("click", async () => {
   state = await browser.runtime.sendMessage({ type: "toggle-filter", tabId }) || state;

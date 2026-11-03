@@ -96,7 +96,8 @@ The free Proton plan allows one connection at a time: while Mor uses a server, k
 
 ## Security and privacy
 
-Everything Mor keeps stays on your PC. There's no Mor account, no Mor server, no analytics and no telemetry.
+Everything Mor keeps stays on your PC. There's no Mor account, no Mor server, no analytics and no telemetry. The full
+[privacy policy](PRIVACY.md) says what goes where.
 
 - **Your Twitch login**: Mor never stores it. When a stream starts, the extension reads Firefox's own Twitch login
   cookie (`auth-token`) and hands it to the helper for that one request, which sends it only to Twitch (through the
@@ -140,4 +141,5 @@ The song removal in the tab is tested sample for sample against the helper's Pyt
 
 ---
 
-Mor is an independent project, not affiliated with Twitch, Proton, Shazam or YouTube.
+Mor is open source under the [MIT License](LICENSE). It's an independent project, not affiliated with Twitch,
+Proton, Shazam or YouTube.

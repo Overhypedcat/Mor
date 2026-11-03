@@ -26,7 +26,8 @@ function fakePort(name, sender) {
   return port;
 }
 
-function load({ cookie = "tok", nativeFails = false } = {}) {
+function load({ cookie = "tok", nativeFails = false, nativeMissing = false } = {}) {
+  const opened = [];
   const natives = [];
   const filters = [];
   const reloaded = [];
@@ -34,15 +35,18 @@ function load({ cookie = "tok", nativeFails = false } = {}) {
   const browser = {
     storage: { local: { get: async () => ({ ...stored }), set: async (v) => Object.assign(stored, v) } },
     runtime: {
-      onConnect: event(), onMessage: event(),
+      onConnect: event(), onMessage: event(), onInstalled: event(), getURL: (p) => `moz-extension://x/${p}`,
       connectNative: () => {
         if (nativeFails) throw new Error("No such native application mor_helper");
         const port = fakePort("native");
         natives.push(port);
+        // as Firefox does it: the port opens, then closes at once saying why
+        if (nativeMissing) setTimeout(() => port.onDisconnect.fire({ error: { message: "No such native application mor_helper" } }), 1);
         return port;
       },
     },
     tabs: { onRemoved: event(), onUpdated: event(), reload: async (id) => reloaded.push(id),
+      create: async (props) => opened.push(props.url),
       get: async (id) => ({ id, cookieStoreId: "firefox-default" }) },
     cookies: { get: async () => (cookie ? { value: cookie } : null) },
     webRequest: {
@@ -64,7 +68,7 @@ function load({ cookie = "tok", nativeFails = false } = {}) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context, { filename: file });
   }
   const api = {
-    browser, natives, filters, reloaded, stored, context,
+    browser, natives, filters, reloaded, stored, context, opened,
     tab(id, channel) {
       const port = fakePort("mor-tab", { tab: { id } });
       browser.runtime.onConnect.fire(port);
@@ -240,8 +244,9 @@ test("a helper that isn't installed is said in words the user can act on", async
   const port = m.tab(1, "someone");
   port.onMessage.fire({ type: "filter-start", sid: "s1" });
   const state = await m.ask({ type: "hub-state", tabId: 1 });
-  assert.match(state.helper.error, /isn't installed on this PC: run Install Mor.cmd/);
-  assert.match(state.tab.filter.problem, /isn't installed/);
+  assert.match(state.helper.error, /Mor needs its helper on this PC: click Mor's button in the toolbar/);
+  assert.strictEqual(state.helper.missing, true); // the hub shows how to set it up
+  assert.match(state.tab.filter.problem, /Mor needs its helper/); // and the player says so
 });
 
 test("a helper that stops is told to each tab using it", async () => {
@@ -290,4 +295,30 @@ test("a new page in the tab decides its stream afresh", async () => {
   m.browser.webRequest.onBeforeRequest.listeners[1]({ tabId: 1, url: "https://www.twitch.tv/someone", type: "main_frame" });
   m.usher(1, "someone");
   assert.strictEqual(m.filters.length, 2);
+});
+
+test("installed without its helper: the setup page opens by itself, once", async () => {
+  const m = load({ nativeMissing: true });
+  m.browser.runtime.onInstalled.fire({ reason: "install" });
+  await tick();
+  assert.deepStrictEqual(m.opened, ["moz-extension://x/hub/hub.html?page"]);
+  const state = await m.ask({ type: "hub-state", tabId: null });
+  assert.strictEqual(state.helper.missing, true);
+  // the hub's "Check again" tries once more: still missing, no second page
+  await m.ask({ type: "helper-check", tabId: null });
+  await tick();
+  assert.strictEqual(m.opened.length, 1);
+});
+
+test("an update, or a helper that's there, opens nothing", async () => {
+  const m = load({ nativeMissing: true });
+  m.browser.runtime.onInstalled.fire({ reason: "update" });
+  await tick();
+  assert.deepStrictEqual(m.opened, []);
+  const n = load();
+  n.browser.runtime.onInstalled.fire({ reason: "install" });
+  n.helperSays({ type: "hello", version: "1.0.1", tunnel: true, javascript: true, servers: [] });
+  await tick();
+  assert.deepStrictEqual(n.opened, []);
+  assert.strictEqual((await n.ask({ type: "hub-state", tabId: null })).helper.missing, false);
 });

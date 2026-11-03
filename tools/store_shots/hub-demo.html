@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- The hub with a demo state, for the store's screenshots: the real hub.html's body, CSS and script, with a stand-in
+     for Firefox's extension API that answers with the state named in the address (?filtering, ?servers, ?setup). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mor</title>
+  <link rel="stylesheet" href="../../extension/hub/hub.css">
+  <style>body { margin: 0; }</style>
+</head>
+<body>
+  <script>
+  (() => { // (its names stay its own: the hub's script has a "state" of its own)
+    const kind = location.search.slice(1) || "filtering";
+    const servers = ["wg-NL-FREE-102", "wg-NL-FREE-111", "wg-US-FREE-38"];
+    const now = Date.now();
+    const state = {
+      helper: { connected: kind !== "setup", error: null, lastError: null, missing: kind === "setup",
+        version: "1.0.1", tunnel: true, javascript: true },
+      servers, inUse: "wg-NL-FREE-102", unlockOn: true, loggedIn: true, now,
+      tab: { channel: "streamer", hevc: true, filterOn: true, audio: null, via: true,
+        filter: { state: "filtering", problem: null, step: "Removing Calvin Harris - Summer", retryAt: 0,
+          playing: "Calvin Harris - Summer" },
+        unlock: { via: true, server: "wg-NL-FREE-102", extra: ["1440p60"] } },
+    };
+    window.browser = {
+      runtime: {
+        connect: () => ({ onDisconnect: { addListener() {} } }),
+        getManifest: () => ({ version: "1.0.1" }),
+        getURL: (p) => p,
+        sendMessage: async (m) => (m.type === "servers" ? { servers, error: null } : state),
+      },
+      tabs: { query: async () => [{ id: 1 }], create: () => {} },
+    };
+  })();
+  </script>
+  <div id="hub"></div>
+  <script>
+    // the hub's own markup, read from the extension so the shots never drift from it
+    const request = new XMLHttpRequest();
+    request.open("GET", "../../extension/hub/hub.html", false);
+    request.send();
+    const doc = new DOMParser().parseFromString(request.responseText, "text/html");
+    for (const img of doc.querySelectorAll("img")) img.src = "../../extension/icons/mor.svg";
+    for (const s of doc.querySelectorAll("script")) s.remove();
+    document.getElementById("hub").replaceWith(...doc.body.childNodes);
+  </script>
+  <script src="../../extension/lib/shared.js"></script>
+  <script src="../../extension/hub/hub.js"></script>
+  <script>
+    if (location.search === "?servers") setTimeout(() => { document.getElementById("servers-drawer").open = true; }, 300);
+  </script>
+</body>
+</html>
