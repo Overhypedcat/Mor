@@ -222,9 +222,10 @@
       row.remove();
       return;
     }
-    row.place(container, controls, group);
     const fading = controls.closest(".tw-transition") || controls;
     const up = Number(getComputedStyle(fading).opacity) > 0.5 && getComputedStyle(controls).visibility !== "hidden";
+    // measured against Twitch's buttons only while they show, and never under the mouse: it stays where it was
+    row.place(container, controls, group, up && !row.hovered);
     row.update({ on: wanted, filter: filterState, audio: audioProblem }, up, Date.now());
   }
 

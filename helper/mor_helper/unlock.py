@@ -5,6 +5,7 @@ player in place of the one Twitch gave Firefox, and sends that tab's video throu
 The servers are tried one after another, in case a free one is busy; a rejected login stops at the first, since no
 other server would take it either.
 """
+from mor_helper import netcompat  # noqa: F401  (before streamlink: see netcompat)
 from streamlink import Streamlink
 from streamlink.options import Options
 

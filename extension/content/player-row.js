@@ -16,8 +16,8 @@ const PlayerRow = (() => {
     [hidden] { display: none !important; }
     .row {
       position: absolute; z-index: 10; display: flex; align-items: center; height: 34px; gap: 0;
-      padding: 0 2px 0 0; border-radius: 12px; background: rgba(14, 14, 16, 0.78);
-      font: 13px/1 Inter, "Roobert", "Helvetica Neue", Helvetica, Arial, sans-serif; color: #adadb8;
+      padding: 0 2px 0 0;
+      font: 13px/1 Inter, "Roobert", "Helvetica Neue", Helvetica, Arial, sans-serif; color: #fff;
       opacity: 0; pointer-events: none; transition: opacity ${FADE_OUT_MS}ms ease;
       -webkit-font-smoothing: antialiased; user-select: none;
     }
@@ -29,13 +29,13 @@ const PlayerRow = (() => {
       all: unset; flex: none; display: grid; place-items: center; cursor: pointer; border-radius: 9px;
       -webkit-tap-highlight-color: transparent;
     }
-    button:hover { background: rgba(255, 255, 255, 0.12); }
+    button:hover { background: rgba(255, 255, 255, 0.15); }
     .retry { width: 26px; height: 26px; margin-right: 6px; color: #fff; font-size: 11px; }
-    .retry.waiting { color: #adadb8; cursor: default; }
+    .retry.waiting { color: rgba(255, 255, 255, 0.7); cursor: default; }
     .retry.waiting:hover { background: none; }
     .retry svg { width: 26px; height: 26px; }
     .switch { width: 40px; height: 30px; border-radius: 10px; }
-    .track { position: relative; width: 28px; height: 16px; border-radius: 8px; background: #26262c; transition: background .15s; }
+    .track { position: relative; width: 28px; height: 16px; border-radius: 8px; background: rgba(255, 255, 255, 0.3); transition: background .15s; }
     .knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .15s; }
     .switch.on .track { background: #9146ff; }
     .switch.problem .track { background: #ff3b4f; }
@@ -123,17 +123,26 @@ const PlayerRow = (() => {
       }
       this.switch.addEventListener("click", () => onToggle());
       this.retry.addEventListener("click", () => { if (!this.retry.classList.contains("waiting")) onRetry(); });
+      // The row sits over Twitch's player, which takes the mouse being on the row for the mouse leaving it and hides
+      // its controls (and with them the row, and back: a flicker). While the mouse is on the row it stays up, and
+      // stays where it is.
+      this.hovered = false;
+      this.row.addEventListener("pointerenter", () => { this.hovered = true; });
+      this.row.addEventListener("pointerleave", () => { this.hovered = false; });
       this.drawn = null;
       this.noticeUntil = 0;
       this.lastProblem = null;
     }
 
+
     // Puts the row on the player (once per player), and lays it out beside Twitch's buttons.
-    place(container, controls, rightGroup) {
+    place(container, controls, rightGroup, measure = true) {
       if (this.host.parentElement !== container) {
         if (getComputedStyle(container).position === "static") container.style.position = "relative";
         container.append(this.host);
+        measure = true; // a new player: measured at once
       }
+      if (!measure) return;
       const box = container.getBoundingClientRect();
       // Twitch's groups are wider than their buttons (the right one's sit at its right end, the left one's at its
       // left): the row goes between the buttons themselves
@@ -158,8 +167,9 @@ const PlayerRow = (() => {
       const state = Mor.rowState(model.on, model.filter, model.audio);
       if (problem && text !== this.lastProblem) this.noticeUntil = now + NOTICE_MS; // a new problem: said
       this.lastProblem = problem ? text : null;
-      const shown = controlsUp || (problem && now < this.noticeUntil);
+      const shown = controlsUp || this.hovered || (problem && now < this.noticeUntil);
       this.row.classList.toggle("shown", Boolean(shown));
+      this.host.dataset.shown = shown ? "true" : "false";
       const wait = model.on ? Mor.retryWait(model.filter, now) : null;
       const phase = Mor.musicPhase(state, now);
       const key = JSON.stringify([text, problem, state, wait, phase]);
