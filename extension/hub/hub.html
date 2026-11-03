@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mor</title>
+  <link rel="stylesheet" href="hub.css">
+</head>
+<body>
+  <header class="top">
+    <img class="logo" src="../icons/mor.svg" alt="">
+    <h1>Mor</h1>
+    <span class="helper" id="helper"></span>
+  </header>
+
+  <p class="alert" id="helper-error" hidden></p>
+
+  <section class="card" id="filter-card">
+    <div class="row">
+      <div class="title">
+        <h2>Music filter</h2>
+        <p class="sub" id="filter-channel"></p>
+      </div>
+      <button class="switch" id="filter-switch" role="switch" aria-checked="false" aria-label="Music filter"><span></span></button>
+    </div>
+    <div class="status" id="filter-status" hidden>
+      <span class="dot" id="filter-dot"></span>
+      <p id="filter-text"></p>
+      <button class="retry" id="filter-retry" aria-label="Ask Shazam again" title="Ask Shazam again">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" /><path d="M19.5 4.5v4h-4" /></svg>
+        <span id="filter-wait"></span>
+      </button>
+    </div>
+  </section>
+
+  <section class="card" id="unlock-card">
+    <div class="row">
+      <div class="title">
+        <h2>1440p unlock</h2>
+        <p class="sub" id="unlock-sub"></p>
+      </div>
+      <button class="switch" id="unlock-switch" role="switch" aria-checked="false" aria-label="1440p unlock"><span></span></button>
+    </div>
+    <div class="status" id="unlock-status" hidden>
+      <span class="dot" id="unlock-dot"></span>
+      <p id="unlock-text"></p>
+    </div>
+  </section>
+
+  <section class="card" id="servers-card">
+    <div class="row">
+      <div class="title">
+        <h2>VPN servers</h2>
+        <p class="sub">Tried in this order; the first that works is used.</p>
+      </div>
+    </div>
+    <ul class="servers" id="servers"></ul>
+    <p class="empty" id="servers-empty" hidden>No servers yet</p>
+    <p class="alert small" id="servers-error" hidden></p>
+    <div class="actions">
+      <button class="button primary" id="add-servers">Add servers</button>
+      <input type="file" id="files" accept=".conf" multiple hidden>
+    </div>
+    <details class="guide" id="guide">
+      <summary>How to add Proton VPN servers</summary>
+      <ol>
+        <li>Make a free account at <a href="https://protonvpn.com/free-vpn" target="_blank" rel="noopener">protonvpn.com</a>, or sign in to yours.</li>
+        <li>Open <a href="https://account.protonvpn.com/downloads" target="_blank" rel="noopener">account.protonvpn.com/downloads</a> and scroll to <b>WireGuard configuration</b>.</li>
+        <li>Give the config any name, and pick <b>Windows</b> as the platform.</li>
+        <li>Under VPN options, set <b>NetShield blocker filtering</b> to <b>No filter</b>.</li>
+        <li>In the server list, pick a <b>free</b> server in the <b>Netherlands</b> or the <b>United States</b> and press <b>Create</b>.</li>
+        <li>Press <b>Download</b>: you get a <b>.conf</b> file. Make two or three, on different servers, in case one is busy.</li>
+        <li>Here, press <b>Add servers</b> and choose the .conf files.</li>
+      </ol>
+      <p class="note">The free plan allows one connection at a time: while Mor uses a server, keep the Proton app disconnected.</p>
+    </details>
+  </section>
+
+  <script src="../lib/shared.js"></script>
+  <script src="hub.js"></script>
+</body>
+</html>

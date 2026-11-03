@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.egg-info/
+helper/MorHelper.exe
+web-ext-artifacts/
+.amo-keys

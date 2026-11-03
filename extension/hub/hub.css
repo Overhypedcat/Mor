@@ -1,0 +1,117 @@
+:root {
+  --bg: #0e0e10;
+  --panel: #18181b;
+  --surface: #26262c;
+  --hover: #323238;
+  --line: #2c2c32;
+  --accent: #9146ff;
+  --accent-hover: #a970ff;
+  --text: #efeff1;
+  --muted: #adadb8;
+  --error: #ff6b7a;
+  --good: #00c48c;
+  --radius: 16px;
+  --radius-small: 11px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  background: var(--panel);
+  color: var(--text);
+  font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body { width: 360px; padding: 12px; }
+body.page { width: auto; max-width: 480px; margin: 32px auto; padding: 16px; }
+body.page #filter-card, body.page #unlock-card { display: none; }
+
+.top { display: flex; align-items: center; gap: 10px; padding: 2px 4px 12px; }
+.logo { width: 28px; height: 28px; }
+h1 { font-size: 17px; font-weight: 650; margin: 0; flex: 1; }
+h2 { font-size: 13px; font-weight: 650; margin: 0; }
+
+.helper { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.helper::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.helper.up::before { background: var(--good); }
+.helper.down::before { background: var(--error); }
+
+.card { background: var(--surface); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+.row { display: flex; align-items: center; gap: 12px; }
+.title { flex: 1; min-width: 0; }
+.sub { margin: 2px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+
+.switch {
+  flex: none; width: 40px; height: 24px; border: 0; padding: 0; border-radius: 12px;
+  background: var(--hover); position: relative; cursor: pointer; transition: background .15s;
+}
+.switch span {
+  position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--muted); transition: transform .15s, background .15s;
+}
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"] span { transform: translateX(16px); background: #fff; }
+.switch:disabled { opacity: .45; cursor: default; }
+
+.status {
+  display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px;
+  background: var(--panel); border-radius: var(--radius-small);
+}
+.status p { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.status.problem p { color: var(--error); }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.on { background: var(--accent); }
+.dot.good { background: var(--good); }
+.dot.bad { background: var(--error); }
+
+.retry {
+  flex: none; display: flex; align-items: center; gap: 4px; height: 28px; min-width: 28px; padding: 0 6px;
+  border: 0; border-radius: 9px; background: var(--hover); color: var(--text); cursor: pointer; font: inherit;
+}
+.retry svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.retry:hover:not(:disabled) { background: var(--accent); }
+.retry:disabled { color: var(--muted); cursor: default; }
+.retry span:empty { display: none; }
+
+.alert { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--radius-small); background: #3a1d23; color: var(--error); overflow-wrap: anywhere; }
+.alert.small { margin: 8px 0 0; }
+
+.servers { list-style: none; margin: 10px 0 0; padding: 0; }
+.servers li { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 6px; margin: 0 -6px; border-radius: 10px; }
+.servers li:hover { background: var(--hover); }
+.badge {
+  flex: none; width: 26px; height: 26px; border-radius: 8px; background: var(--panel); color: var(--muted);
+  display: grid; place-items: center; font-size: 11px; font-weight: 650;
+}
+.servers .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.servers .use { color: var(--accent-hover); font-size: 12px; }
+.remove {
+  flex: none; width: 22px; height: 22px; border: 0; border-radius: 7px; background: transparent; color: var(--muted);
+  cursor: pointer; display: grid; place-items: center; visibility: hidden;
+}
+.servers li:hover .remove { visibility: visible; }
+.remove:hover { background: var(--panel); color: var(--text); }
+.remove svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.empty { color: var(--muted); margin: 10px 0 0; }
+
+.actions { display: flex; gap: 8px; margin-top: 12px; }
+.button {
+  flex: 1; height: 34px; border: 0; border-radius: var(--radius-small); background: var(--hover); color: var(--text);
+  font: 600 13px/1 "Segoe UI", system-ui, sans-serif; cursor: pointer;
+}
+.button.primary { background: var(--accent); }
+.button.primary:hover { background: var(--accent-hover); }
+
+.guide { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.guide summary { cursor: pointer; color: var(--accent-hover); font-weight: 600; list-style: none; }
+.guide summary::-webkit-details-marker { display: none; }
+.guide summary::before { content: "›"; display: inline-block; width: 14px; transition: transform .15s; }
+.guide[open] summary::before { transform: rotate(90deg); }
+.guide ol { margin: 10px 0 0; padding-left: 20px; }
+.guide li { margin-bottom: 6px; }
+.guide a { color: var(--accent-hover); }
+.guide .note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
