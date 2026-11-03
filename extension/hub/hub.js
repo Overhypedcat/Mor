@@ -38,6 +38,11 @@ function renderHelper() {
     problems.push("Getting songs from YouTube needs Node.js: run Install Mor.cmd again");
   }
   if (h.lastError) problems.push(h.lastError);
+  const mine = browser.runtime.getManifest().version;
+  if (h.connected && Mor.helperOutdated(h.version, mine)) {
+    problems.push(`Mor's helper is version ${h.version}, the extension ${mine}: download Mor's latest release and ` +
+      "run Install Mor.cmd from it");
+  }
   $("helper-error").textContent = problems.join("\n");
   show($("helper-error"), problems.length > 0);
 }

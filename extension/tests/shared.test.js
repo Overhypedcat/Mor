@@ -120,3 +120,11 @@ test("the listening dots step, only while listening; the retry counts down", () 
   assert.strictEqual(Mor.retryWait({ retryAt: 500 }, 1000), 0);
   assert.strictEqual(Mor.retryWait({}, 1000), 0);
 });
+
+test("an older helper than the extension is noticed", () => {
+  assert.strictEqual(Mor.helperOutdated("0.1.2", "0.1.3"), true);
+  assert.strictEqual(Mor.helperOutdated("0.1.2", "0.1.10"), true); // by number, not by text
+  assert.strictEqual(Mor.helperOutdated("0.1.3", "0.1.3"), false);
+  assert.strictEqual(Mor.helperOutdated("0.2.0", "0.1.9"), false);
+  assert.strictEqual(Mor.helperOutdated(null, "0.1.3"), false); // not running yet: nothing to say
+});

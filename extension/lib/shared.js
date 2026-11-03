@@ -173,7 +173,18 @@ const Mor = (() => {
     return Math.max(0, Math.ceil(((filter.retryAt || 0) - now) / 1000));
   }
 
-  return { isQuality, qualities, unlockedOnly, needsVpn, usherChannel, pageChannel, parseStatus, applyStatus,
+  // Whether the helper on this PC is older than the extension (Firefox updates the extension by itself; the helper
+  // comes with Mor's folder): '0.1.2' < '0.1.10'.
+  function helperOutdated(helperVersion, extensionVersion) {
+    if (!helperVersion || !extensionVersion) return false;
+    const a = helperVersion.split(".").map(Number), b = extensionVersion.split(".").map(Number);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) < (b[i] || 0);
+    }
+    return false;
+  }
+
+  return { helperOutdated, isQuality, qualities, unlockedOnly, needsVpn, usherChannel, pageChannel, parseStatus, applyStatus,
     toBase64, fromBase64, serverLabel, rowText, rowState, musicPhase, retryWait };
 })();
 

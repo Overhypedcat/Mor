@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mor-helper"
-version = "0.1.2"
+version = "0.1.3"
 description = "Mor's helper: the music filter's song finding and the 1440p unlock's VPN asks, for Mor's Firefox extension"
 requires-python = ">=3.10"
 dependencies = ["streamlink>=8.0", "yt-dlp[default]>=2025.1.1", "av>=14", "numpy>=2", "shazamio>=0.9"]
