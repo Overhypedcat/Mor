@@ -13,8 +13,9 @@ the extension: it has no window, starts only while the extension needs it, and s
 
 ### Music filter: remove songs from Twitch streams
 
-- On for every channel from the start. Switch it off for a channel from Mor's toolbar button while you watch it;
-  Mor remembers the channels you've switched off.
+- Off until you switch it on for a channel from Mor's toolbar button while you watch it; Mor remembers the channels
+  you've switched on. It keeps working while the Twitch tab is in the background.
+- What it's doing shows in Twitch's player controls, with a retry button that asks Shazam again.
 - Every few seconds it asks Shazam what song is playing in the stream, fetches the song's clean copy from YouTube
   Music (or YouTube), finds exactly where in the song the stream is, and subtracts the song from the sound as it plays,
   matching the streamer's volume and EQ. The streamer's voice, the game and alerts stay.
@@ -51,7 +52,9 @@ the extension: it has no window, starts only while the extension needs it, and s
 
 ## Install
 
-Needs Windows 10 or 11 and Firefox.
+Needs Windows 10 or 11 and Firefox. The extension is on Firefox's add-on store
+([Mor on addons.mozilla.org](https://addons.mozilla.org/firefox/addon/mor-twitch/)) and here; either way it needs its
+helper on your PC, which the steps below set up (they add the extension too).
 
 1. Download Mor from the [latest release](https://github.com/Overhypedcat/Mor/releases) (**Source code (zip)**)
    and unzip it.
@@ -69,7 +72,7 @@ own buttons: "Listening for music", "Removing Artist - Song", or what went wrong
 
 Mor's toolbar button opens its hub:
 
-- **Music filter**: switch it off or on for the channel you're watching, see what it's doing, and ask Shazam again
+- **Music filter**: switch it on or off for the channel you're watching, see what it's doing, and ask Shazam again
   with the retry button.
 - **1440p unlock**: on or off for all channels. When it's on, Mor checks each live stream as it starts and shows
   whether it's playing a locked quality through the VPN. Choose 1440p in Twitch's own quality menu. Under **VPN

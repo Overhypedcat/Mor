@@ -194,24 +194,52 @@ test("switching the unlock off takes tabs off the tunnel and starts their stream
   assert.strictEqual(m.stored.unlock, false);
 });
 
-test("the music filter: on for every channel at first, switched off per channel and kept", async () => {
+test("the music filter: off for every channel at first, switched on per channel and kept", async () => {
   const m = load();
   const port = m.tab(1, "someone");
-  same(told(port).at(-1), { type: "filter", on: true });
+  same(told(port).at(-1), { type: "filter", on: false });
   const other = m.tab(2, "someone_else");
   let state = await m.ask({ type: "toggle-filter", tabId: 1 });
-  assert.strictEqual(state.tab.filterOn, false);
-  same(m.stored.filterOff, ["someone"]);
-  same(told(port).at(-1), { type: "filter", on: false });
-  same(told(other).at(-1), { type: "filter", on: true }); // other channels stay on
-  state = await m.ask({ type: "toggle-filter", tabId: 1 });
   assert.strictEqual(state.tab.filterOn, true);
-  same(m.stored.filterOff, []);
+  same(m.stored.filterOn, ["someone"]);
+  same(told(port).at(-1), { type: "filter", on: true });
+  same(told(other).at(-1), { type: "filter", on: false }); // other channels stay off
+  state = await m.ask({ type: "toggle-filter", tabId: 1 });
+  assert.strictEqual(state.tab.filterOn, false);
+  same(m.stored.filterOn, []);
+});
+
+test("the hub opened on another tab shows the Twitch tab Mor is filtering, which keeps going there", async () => {
+  const m = load();
+  m.tab(1, "idle_channel");
+  const port = m.tab(2, "someone");
+  await m.ask({ type: "toggle-filter", tabId: 2 });
+  port.onMessage.fire({ type: "filter-start", sid: "s1" });
+  const elsewhere = 99; // a tab that isn't Twitch
+  let state = await m.ask({ type: "hub-state", tabId: elsewhere });
+  assert.strictEqual(state.tabId, 2);
+  assert.strictEqual(state.tab.channel, "someone");
+  assert.strictEqual(state.tab.filterOn, true);
+  assert.strictEqual(await m.ask({ type: "retry", tabId: elsewhere }), true);
+  same(m.natives.at(-1).sent.at(-1), { type: "retry", sid: "s1" });
+  state = await m.ask({ type: "hub-state", tabId: 1 }); // opened on a Twitch tab: that one
+  assert.strictEqual(state.tab.channel, "idle_channel");
+});
+
+test("the player's retry button reaches the helper", async () => {
+  const m = load();
+  const port = m.tab(1, "someone");
+  await m.ask({ type: "toggle-filter", tabId: 1 });
+  port.onMessage.fire({ type: "filter-start", sid: "s1" });
+  port.onMessage.fire({ type: "retry", sid: "s1" });
+  same(m.natives.at(-1).sent.at(-1), { type: "retry", sid: "s1" });
+  assert.ok(port.sent.filter((x) => x.type === "state").at(-1).filter.retryAt > Date.now());
 });
 
 test("the music filter: the tab's sound to the helper, the helper's news to the tab", async () => {
   const m = load();
   const port = m.tab(1, "someone");
+  await m.ask({ type: "toggle-filter", tabId: 1 });
   same(told(port).at(-1), { type: "filter", on: true });
   port.onMessage.fire({ type: "filter-start", sid: "s1" });
   const native = m.natives.at(-1);
@@ -252,6 +280,7 @@ test("a helper that isn't installed is said in words the user can act on", async
 test("a helper that stops is told to each tab using it", async () => {
   const m = load();
   const port = m.tab(1, "someone");
+  await m.ask({ type: "toggle-filter", tabId: 1 });
   port.onMessage.fire({ type: "filter-start", sid: "s1" });
   m.helperSays({ type: "hello", version: "0.1.0", tunnel: true, javascript: true, servers: [] });
   m.natives.at(-1).onDisconnect.fire({ error: { message: "crashed" } });

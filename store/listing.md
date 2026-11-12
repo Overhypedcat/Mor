@@ -20,8 +20,8 @@ Mor is a Firefox extension for Twitch with two features:
 **Music filter: remove songs from Twitch streams**
 Mor recognizes the song a streamer is playing (Shazam), fetches its clean copy from YouTube Music or YouTube, finds
 exactly where in the song the stream is, and subtracts the song from the stream's sound as it plays, matching the
-streamer's volume and EQ. The streamer's voice, the game and alerts stay. It's on for every channel from the start;
-switch it off per channel from Mor's toolbar button. What it's doing shows in Twitch's player controls.
+streamer's volume and EQ. The streamer's voice, the game and alerts stay. Switch it on per channel
+from Mor's toolbar button. What it's doing shows in Twitch's player controls, with a button to look for the song again.
 
 **1440p unlock: watch region-locked 1440p Twitch streams**
 Twitch offers its 1440p (Enhanced Broadcasting) copies only in some countries. Mor asks Twitch for the stream through

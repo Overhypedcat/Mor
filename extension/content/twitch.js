@@ -21,7 +21,7 @@
   let copy = null; // a song's copy on its way: {id, length, buffer, got, parts}
   let audioProblem = null;
   let filterState = { state: "listening", problem: null, step: null, retryAt: 0 }; // as the background last said
-  const row = new PlayerRow.Row();
+  const row = new PlayerRow.Row(() => { if (sid) tell({ type: "retry", sid }); });
 
   function tell(message) {
     try { port.postMessage(message); } catch (error) { /* the background is reloading: it asks again */ }
@@ -220,7 +220,7 @@
       return;
     }
     row.place(group);
-    row.update({ on: wanted, filter: filterState, audio: audioProblem });
+    row.update({ on: wanted, filter: filterState, audio: audioProblem, running: Boolean(sid) });
   }
 
   tell({ type: "page", channel: (channel = Mor.pageChannel(location.href)), hevc });

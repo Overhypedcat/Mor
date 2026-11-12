@@ -41,9 +41,18 @@ $env:WEB_EXT_API_KEY = $key
 $env:WEB_EXT_API_SECRET = $secret
 New-Item -ItemType Directory -Force $Artifacts | Out-Null
 $before = @(Get-ChildItem $Artifacts -Filter *.xpi | ForEach-Object FullName)
-& npx --yes web-ext@8 sign --channel=$Channel --source-dir "$Extension" --artifacts-dir "$Artifacts" --ignore-files "tests/**" --approval-timeout 900000 @(if ($Metadata) { "--amo-metadata", $Metadata })
+# A store (listed) version waits for Mozilla's review, which takes hours or days: it's submitted without waiting
+# (waiting means asking Mozilla over and over, which its rate limits punish). Unlisted ones are signed in minutes.
+$wait = if ($Unlisted) { 900000 } else { 0 }
+& npx --yes web-ext@8 sign --channel=$Channel --source-dir "$Extension" --artifacts-dir "$Artifacts" --ignore-files "tests/**" --approval-timeout $wait @(if ($Metadata) { "--amo-metadata", $Metadata })
 $code = $LASTEXITCODE
 Remove-Item Env:WEB_EXT_API_KEY, Env:WEB_EXT_API_SECRET -ErrorAction SilentlyContinue
+if (-not $Unlisted -and $code -eq 0) {
+    Write-Host ""
+    Write-Host ("Submitted Mor $version to the add-on store. Once Mozilla has reviewed it, download the signed file from " +
+                "the Developer Hub (Mor > Manage Status & Versions) and save it as Mor.xpi") -ForegroundColor Green
+    exit 0
+}
 if ($code -ne 0) {
     Fail ("web-ext stopped with code $code (its message is above). A version Mozilla has seen before must be raised " +
           "in extension\manifest.json. A store version waiting for Mozilla's review is signed once approved: download " +

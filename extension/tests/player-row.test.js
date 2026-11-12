@@ -35,10 +35,12 @@ class FakeElement {
     this.moves += 1;
   }
 
-  append(element) {
-    this.detach(element);
-    this.children.push(element);
-    element.parentElement = this;
+  append(...elements) {
+    for (const element of elements) {
+      this.detach(element);
+      this.children.push(element);
+      element.parentElement = this;
+    }
   }
 
   detach(element) {
@@ -53,14 +55,24 @@ class FakeElement {
 
 global.Node = { DOCUMENT_POSITION_FOLLOWING: FOLLOWING };
 global.Mor = require("../lib/shared.js");
-global.document = {
-  createElement: (tag) => Object.assign(new FakeElement(tag), {
-    attachShadow: () => ({ append: () => {} }),
+function fake(tag) {
+  const element = new FakeElement(tag);
+  const listeners = {};
+  const classes = new Set();
+  return Object.assign(element, {
+    attachShadow: () => fake("#shadow"),
     setAttribute: () => {},
-    classList: { toggle: () => {} },
-  }),
-};
-const { Row } = require("../content/player-row.js");
+    addEventListener: (kind, fn) => { (listeners[kind] = listeners[kind] || []).push(fn); },
+    fire(kind) {
+      let stopped = false;
+      for (const fn of listeners[kind] || []) fn({ stopPropagation: () => { stopped = true; } });
+      return stopped;
+    },
+    classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)), contains: (n) => classes.has(n) },
+  });
+}
+global.document = { createElement: fake, createElementNS: (ns, tag) => fake(tag) };
+const { Row, retryWait } = require("../content/player-row.js");
 
 function bar(...names) {
   const group = new FakeElement("group");
@@ -110,4 +122,48 @@ test("an empty group still gets the text", () => {
   const row = new Row();
   row.place(group);
   assert.deepStrictEqual(order(group), ["div", "empty"]);
+});
+
+const filtering = { state: "filtering", problem: null, step: "Removing A - B", retryAt: 0 };
+
+test("the retry button sits left of the text, and pressing it retries (and stays Mor's click)", () => {
+  let retried = 0;
+  const row = new Row(() => { retried += 1; });
+  row.update({ on: true, filter: filtering, audio: null, running: true }, 1000);
+  assert.strictEqual(row.text.textContent, "Removing A - B");
+  assert.strictEqual(row.retry.disabled, false);
+  const capsule = row.retry.parentElement;
+  assert.deepStrictEqual(capsule.children.map((c) => c.name), ["button", "span"]);
+  assert.strictEqual(row.retry.fire("click"), true); // Twitch's player doesn't get the click
+  assert.strictEqual(retried, 1);
+});
+
+test("the retry button waits while Shazam can't be asked, and until the filter has started", () => {
+  let retried = 0;
+  const row = new Row(() => { retried += 1; });
+  row.update({ on: true, filter: { ...filtering, retryAt: 5500 }, audio: null, running: true }, 1000);
+  assert.strictEqual(row.retry.disabled, true);
+  assert.match(row.retry.title, /in 5 s/);
+  row.retry.fire("click");
+  assert.strictEqual(retried, 0);
+  row.update({ on: true, filter: { ...filtering, retryAt: 5500 }, audio: null, running: true }, 6000);
+  assert.strictEqual(row.retry.disabled, false);
+  row.update({ on: true, filter: filtering, audio: null, running: false }, 6000);
+  assert.strictEqual(row.retry.disabled, true);
+});
+
+test("hidden while the filter is off; problems in red", () => {
+  const row = new Row();
+  row.update({ on: false, filter: filtering, audio: null, running: false });
+  assert.strictEqual(row.host.hidden, true);
+  row.update({ on: true, filter: { ...filtering, problem: "Shazam is busy" }, audio: null, running: true });
+  assert.strictEqual(row.host.hidden, false);
+  assert.strictEqual(row.text.textContent, "Shazam is busy");
+  assert.strictEqual(row.text.classList.contains("problem"), true);
+});
+
+test("seconds to wait for a retry", () => {
+  assert.strictEqual(retryWait({ retryAt: 0 }, 1000), 0);
+  assert.strictEqual(retryWait({ retryAt: 3001 }, 1000), 3);
+  assert.strictEqual(retryWait(null, 1000), 0);
 });

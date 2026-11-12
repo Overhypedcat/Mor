@@ -12,7 +12,7 @@ const TUNNEL_HOSTS = ["*://*.ttvnw.net/*", "*://*.live-video.net/*"];
 const DIRECT_HOSTS = new Set(["usher.ttvnw.net"]); // the playlist Twitch gives Firefox is compared, never tunneled
 
 // the music filter is on for every channel but those switched off (kept as a list of logins)
-const settings = { filterOff: [], unlock: true };
+const settings = { filterOn: [], unlock: true }; // the music filter is off until switched on for a channel
 const tabs = new Map(); // tabId -> {port, channel, hevc, sid, filter: {...}, audio, unlock: {...}}
 const sids = new Map(); // music filter session -> tabId
 const vpnTabs = new Map(); // tabId -> {channel, port (socks), server, extra}
@@ -23,13 +23,13 @@ const decided = new Map();
 // settings
 
 async function loadSettings() {
-  const saved = await browser.storage.local.get(["filterOff", "unlock"]);
-  if (Array.isArray(saved.filterOff)) settings.filterOff = saved.filterOff;
+  const saved = await browser.storage.local.get(["filterOn", "unlock"]);
+  if (Array.isArray(saved.filterOn)) settings.filterOn = saved.filterOn;
   if (typeof saved.unlock === "boolean") settings.unlock = saved.unlock;
 }
 
 function saveSettings() {
-  return browser.storage.local.set({ filterOff: settings.filterOff, unlock: settings.unlock });
+  return browser.storage.local.set({ filterOn: settings.filterOn, unlock: settings.unlock });
 }
 
 // the helper
@@ -246,7 +246,7 @@ function onHelperGone(wasUp) {
 // the tabs
 
 function filterOn(channel) {
-  return Boolean(channel) && !settings.filterOff.includes(channel);
+  return Boolean(channel) && settings.filterOn.includes(channel);
 }
 
 browser.runtime.onConnect.addListener((port) => {
@@ -308,6 +308,9 @@ function onTabMessage(tabId, tab, message) {
     case "audio":
       tab.audio = message.problem || null;
       break;
+    case "retry": // the retry button in the player's controls
+      if (tab.sid === message.sid) retryFilter(tab);
+      break;
     default:
       break;
   }
@@ -325,9 +328,9 @@ function endFilter(tab) {
 // The music filter on or off for the tab's channel, kept for next time; every tab on that channel follows.
 function toggleFilter(tab) {
   if (!tab || !tab.channel) return Promise.resolve();
-  const list = settings.filterOff.filter((c) => c !== tab.channel);
-  if (filterOn(tab.channel)) list.push(tab.channel);
-  settings.filterOff = list;
+  const list = settings.filterOn.filter((c) => c !== tab.channel);
+  if (!filterOn(tab.channel)) list.push(tab.channel);
+  settings.filterOn = list;
   for (const t of tabs.values()) if (t.channel) t.port.postMessage({ type: "filter", on: filterOn(t.channel) });
   return saveSettings();
 }
@@ -492,7 +495,18 @@ function reloadChannelTabs(filter) {
   for (const [tabId, tab] of tabs) if (tab.channel && filter(tabId, tab)) browser.tabs.reload(tabId);
 }
 
-async function hubState(tabId) {
+// The tab the hub is about: the one it was opened on when that's a Twitch channel; opened anywhere else, the Twitch tab
+// Mor is working in (filtering first, then one through the VPN, then any channel), which keeps going in the background.
+function hubTabId(tabId) {
+  const own = tabs.get(tabId);
+  if (own && own.channel) return tabId;
+  const channels = [...tabs].filter(([, t]) => t.channel);
+  const pick = channels.find(([, t]) => t.sid) || channels.find(([id]) => vpnTabs.has(id)) || channels[0];
+  return pick ? pick[0] : tabId;
+}
+
+async function hubState(askedFor) {
+  const tabId = hubTabId(askedFor);
   const tab = tabs.get(tabId);
   let token = null;
   try {
@@ -500,6 +514,7 @@ async function hubState(tabId) {
     token = await twitchToken(info && info.cookieStoreId);
   } catch (error) { /* the tab is gone */ }
   return {
+    tabId,
     helper: { connected: Boolean(helper.port && helper.hello), error: helper.error, lastError: helper.lastError,
       missing: Boolean(helper.missing),
       version: helper.hello ? helper.hello.version : null, tunnel: helper.hello ? helper.hello.tunnel : null,
@@ -529,7 +544,7 @@ browser.runtime.onMessage.addListener((message) => {
       if (!helper.port) helper.connect();
       return new Promise((resolve) => setTimeout(() => resolve(hubState(message.tabId)), 1500));
     case "toggle-filter": {
-      const tab = tabs.get(message.tabId);
+      const tab = tabs.get(hubTabId(message.tabId));
       if (!tab || !tab.channel) return Promise.resolve(null);
       return toggleFilter(tab).then(() => hubState(message.tabId));
     }
@@ -537,7 +552,7 @@ browser.runtime.onMessage.addListener((message) => {
       settings.unlock = !settings.unlock;
       return saveSettings().then(() => {
         // like a quality pick: the stream starts again, through the tunnel or past it
-        if (settings.unlock) reloadChannelTabs((tabId) => tabId === message.tabId);
+        if (settings.unlock) reloadChannelTabs((tabId) => tabId === hubTabId(message.tabId));
         else {
           const through = [...vpnTabs.keys()];
           for (const tabId of through) leaveTunnel(tabId);
@@ -546,7 +561,7 @@ browser.runtime.onMessage.addListener((message) => {
         return hubState(message.tabId);
       });
     case "retry":
-      return Promise.resolve(retryFilter(tabs.get(message.tabId)));
+      return Promise.resolve(retryFilter(tabs.get(hubTabId(message.tabId))));
     case "servers":
       return helper.askServers({ type: "servers" });
     case "server-add":
