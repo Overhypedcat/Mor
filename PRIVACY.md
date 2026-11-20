@@ -7,7 +7,7 @@ telemetry. Its developer receives nothing from you.
 ## What is sent out, and to whom
 
 - **Shazam (Apple):** to name the song a streamer is playing, Mor sends short clips of the Twitch stream's sound,
-  about 10 seconds each, at most a few a minute while the music filter is on, and none while a song it already knows
+  about 5 seconds each, at most a few a minute while the music filter is on, and none while a song it already knows
   is being removed. Only the stream's sound is sent: nothing about you, your PC or your browsing. Shazam's own privacy
   policy applies to what it receives.
 - **YouTube Music and YouTube (Google):** to remove a song, Mor searches for it by its name and artist and downloads

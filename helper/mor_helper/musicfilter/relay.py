@@ -17,8 +17,9 @@ RATE = 48000
 HEARD_S = 12  # seconds of the stream kept for recognizing and lining up
 MATCH_S = 8  # seconds of the stream a song's copy is first lined up with: sure of the place before taking it out
 FOLLOW_S = 4  # seconds checked against the song while it's taken out: short, so a song change shows quickly
-ASK_S = 10  # seconds Shazam hears, sent in one request: many songs start quietly, and a short stretch of that
-# silence is a request spent for nothing (it was 5 s until 2026-10-31)
+ASK_S = 5  # seconds Shazam hears, sent in one request: short, so a song is named soon after it starts (it was 10 s
+# from 2026-10-31 to 2026-11-20, for songs that start quietly; the second ask, LISTEN_GAP_S later, covers those)
+LISTEN_GAP_S = 3  # an answer without a song: Shazam is next asked about the ASK_S seconds that come after this gap
 CHECK_S = 4  # how often the song's place is checked while it's being taken out
 LOST = 6  # checks in a row (about 24 s) without finding the song where it should be: it has stopped
 SHAZAM_ON_MISSES = (2, 4)  # which of those checks ask Shazam what's playing, when the song can't be found anywhere
@@ -27,15 +28,15 @@ SHAZAM_ON_MISSES = (2, 4)  # which of those checks ask Shazam what's playing, wh
 # Everything else is worked out from the copy, without a request
 # until then it's still taken out: a moment of not hearing it well (a shout over it, a quiet part) is no reason to
 # let it through, and taking out a song that has stopped costs nothing (its volume goes to nothing)
-# while no song is being taken out, Shazam is asked again as soon as it would hear only new sound (listen_wait), its
+# while no song is being taken out, Shazam is asked again about new sound after a short gap (listen_wait), its
 # budget allowing (2 at once, then one each BUDGET_EVERY_S), so a song starting is named within seconds. No easing
 # off while nothing plays: with no music the filter is switched off. (Before 2026-10-31 it eased off, 6, 10, 15,
 # 20, 25 then 30 s.)
-NOTHING_RUN = 2  # answers in a row without a song (some 20 s of sound): no music now, so Shazam rests a while...
+NOTHING_RUN = 2  # answers in a row without a song (5 s, a 3 s gap, 5 s): no music now, so Shazam rests a while...
 NOTHING_REST_S = 60  # ...this long, instead of spending its budget on talking (songs heard before are still looked
 # for meanwhile, without a request; the retry button wakes it)
-NEXT_SONG_WAIT_S = 5  # once a song is over (or let go), this long before Shazam is asked what's next: a gap between
-# songs, the next one's quiet start
+NEXT_SONG_WAIT_S = 0  # once a song is over (or let go), this long before Shazam is asked what's next: at once, for
+# the next song to be named as soon as can be (it was 5 s until 2026-11-20, for the gap between songs)
 LISTEN_S = 6  # a song named but not taken out yet (no copy lined up, a download failed): tried again this soon
 KNOWN_S = 10  # how often the stream is looked for among the songs heard before, while none is taken out (no request)
 KNOWN_MAX = 60  # the latest songs heard before that are looked through (about 3 s for all of them)
@@ -74,9 +75,9 @@ class Mono:
 
 
 def listen_wait(tries):
-    """Seconds until Shazam is asked again, after this many answers in a row without a song: as soon as it would
-    hear only new sound, however many came before (see LISTEN_S)."""
-    return ASK_S
+    """Seconds from one ask to the next, after this many answers in a row without a song: a LISTEN_GAP_S gap, then
+    ASK_S seconds of new sound, however many came before (NOTHING_RUN of them have it rest instead)."""
+    return LISTEN_GAP_S + ASK_S
 
 
 class Budget:
@@ -335,8 +336,8 @@ class Tracker:
         """Ask Shazam (unless it just named the song); for a song it knows, find a copy that lines up with the
         stream. fresh: straight to Shazam, never a song tried before or heard before (a retry)."""
         sound, sound_from = self.heard.latest(ASK_S * RATE)
-        if sound is None:  # not enough heard yet
-            self.next_at = self.clock() + 1
+        if sound is None:  # not enough heard yet: looked at again the moment there is
+            self.next_at = self.clock() + max(0.0, ASK_S * RATE - self.heard.total) / RATE
             return
         now = self.clock()
         self.next_at = now + KNOWN_S
@@ -414,8 +415,13 @@ class Tracker:
         self.ask_at = self.clock() + UNUSABLE_S
 
     def _known(self):
-        """The song playing, if it's one heard before (by the prints of the copies kept), else None."""
+        """The song playing, if it's one heard before (by the prints of the copies kept), else None. Looked for in
+        the same ASK_S seconds Shazam would hear (MATCH_S once there are that many), so a song heard before never
+        costs a request for lack of sound: on 5 s of a stand-in stream (an EQ, a voice over it), the right song
+        scored 18 to 36, other songs 12 at most, against KNOWN_SURE (2026-11-20, 16 stored songs among 60)."""
         heard, _ = self.heard.latest(MATCH_S * RATE)
+        if heard is None:
+            heard, _ = self.heard.latest(ASK_S * RATE)
         before = self.library.heard_before()[:KNOWN_MAX]
         if heard is None or not before:
             return None

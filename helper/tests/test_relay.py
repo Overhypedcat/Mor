@@ -372,7 +372,7 @@ class TrackerTests(unittest.TestCase):
         self.assertEqual(self.tracker.playing.offset, 21 * RATE)
         self.assertEqual(self.tracker.misses, 0)
 
-    def test_asks_whats_next_a_moment_after_the_song_is_over(self):
+    def test_asks_whats_next_as_soon_as_the_song_is_over(self):
         self.hear(30, 9)  # the last 10 s of the 40 s song
         self.step(0)
         self.recognized = Song("next", "Next", "Artist")
@@ -382,9 +382,7 @@ class TrackerTests(unittest.TestCase):
         self.step(relay.CHECK_S)
         self.assertIsNone(self.tracker.playing)
         self.assertEqual(self.states, [status.FILTERING, status.LISTENING])
-        self.assertEqual(self.problems, [])  # not straight away: a gap between songs, the next one's quiet start
-        self.step(relay.NEXT_SONG_WAIT_S)
-        self.assertEqual(self.problems, ["Artist - Next isn't on YouTube Music or YouTube"])  # then looked up
+        self.assertEqual(self.problems, ["Artist - Next isn't on YouTube Music or YouTube"])  # looked up at once
 
     def test_a_song_without_a_matching_copy_is_given_up_on_the_second_time(self):
         asked = []
@@ -437,7 +435,7 @@ class TrackerTests(unittest.TestCase):
         self.hear(10, 9)
         self.step(0)
         self.recognized = None  # Shazam answers again (nothing it knows playing)
-        self.step(relay.LISTEN_S)
+        self.step(relay.listen_wait(0))  # (asked again on its usual beat)
         self.assertEqual(self.problems, ["Shazam couldn't be asked what's playing: offline", None])
 
     def test_following_the_song_is_all_well(self):
@@ -544,6 +542,27 @@ class TrackerTests(unittest.TestCase):
         self.assertEqual(self.tracker.playing.song, self.recognized)
         self.assertEqual(len(asked), 1)
 
+    def test_a_song_heard_before_is_told_from_the_first_five_seconds(self):
+        import tempfile
+        self.hear(10, 9)
+        self.step(0)  # the first time: Shazam names it, its copy is kept with a print
+        asked = []
+        heard = relay.Heard()  # a stream starting afresh: only ASK_S seconds of it so far
+        tracker = relay.Tracker(heard, self.library, self.states.append, self.problems.append,
+                                recognize=lambda sound: asked.append(1), load=self.tracker.load,
+                                clock=lambda: self.now)
+        with tempfile.TemporaryDirectory() as folder:
+            path = f"{folder}/right.print.npy"
+            np.save(path, self.library.prints["right"].astype(np.float16))
+            self.library.before = [(self.recognized, "right", path)]
+            self.library.ids = ["right"]
+            part = self.song[:, 20 * RATE:(20 + relay.ASK_S) * RATE].mean(0) / 32768
+            heard.add(part.astype(np.float32))
+            tracker.look()
+        self.assertEqual(asked, [])  # no request spent: its print told it
+        self.assertIsNotNone(tracker.playing)
+        self.assertEqual(tracker.playing.song, self.recognized)
+
     def test_waiting_to_hear_enough_isnt_a_try(self):
         self.hear(0, 2)
         for _ in range(9):
@@ -560,9 +579,10 @@ class TrackerTests(unittest.TestCase):
             self.now = self.tracker.next_at
             self.tracker.look()
         gaps = [round(b - a, 6) for a, b in zip(asked, asked[1:])]
-        # two asks on new sound each (the budget's two at once), then a minute's rest, over and over
-        self.assertEqual(gaps[:4], [relay.ASK_S, relay.NOTHING_REST_S, relay.ASK_S, relay.NOTHING_REST_S])
-        self.assertTrue(all(gap >= relay.ASK_S for gap in gaps))
+        # an ask, a short gap and another on new sound (the budget's two at once), then a minute's rest, over and over
+        again = relay.LISTEN_GAP_S + relay.ASK_S
+        self.assertEqual(gaps[:4], [again, relay.NOTHING_REST_S, again, relay.NOTHING_REST_S])
+        self.assertTrue(all(gap >= again for gap in gaps))
 
     def test_a_retry_wakes_it_from_its_rest(self):
         steps = []
@@ -570,7 +590,7 @@ class TrackerTests(unittest.TestCase):
         self.recognized = None
         self.hear(0, 9)
         self.step(0)
-        self.step(relay.ASK_S)
+        self.step(relay.LISTEN_GAP_S + relay.ASK_S)
         self.assertEqual(steps[-1], "No music found, resting a minute")
         asked = []
         self.tracker.recognize = lambda sound: asked.append(1)
@@ -583,8 +603,8 @@ class TrackerTests(unittest.TestCase):
         self.hear(10, 9)
         self.step(0)  # found and taken out: the tries start over
         self.assertEqual(self.tracker.tries, 0)
-        self.assertEqual(relay.listen_wait(0), relay.ASK_S)
-        self.assertEqual(relay.listen_wait(99), relay.ASK_S)  # no easing off
+        self.assertEqual(relay.listen_wait(0), relay.LISTEN_GAP_S + relay.ASK_S)
+        self.assertEqual(relay.listen_wait(99), relay.LISTEN_GAP_S + relay.ASK_S)  # no easing off
 
 
 class TimingTests(unittest.TestCase):
@@ -597,18 +617,38 @@ class TimingTests(unittest.TestCase):
         self.tracker = relay.Tracker(self.heard, FakeLibrary([]), lambda state: None, self.problems.append,
                                      recognize=lambda sound: self.sent.append(len(sound)), clock=lambda: self.now)
 
-    def test_ten_seconds_sent_and_not_before_there_are_ten(self):
-        self.heard.add(np.zeros(9 * RATE, np.float32))
+    def test_five_seconds_sent_and_not_before_there_are_five(self):
+        self.heard.add(np.zeros(4 * RATE, np.float32))
         self.tracker.look()
-        self.assertEqual(self.sent, [])  # a quiet start: no request on too little
+        self.assertEqual(self.sent, [])  # no request on too little
         self.heard.add(np.zeros(1 * RATE, np.float32))
         self.now += 1
         self.tracker.look()
-        self.assertEqual(self.sent, [10 * RATE])
+        self.assertEqual(self.sent, [5 * RATE])
+
+    def test_no_music_asks_again_on_the_five_seconds_after_a_three_second_gap_then_rests_a_minute(self):
+        asked = []  # (when, the stream sample the sound sent began at)
+        self.tracker.recognize = lambda sound: asked.append((self.now, self.heard.total - len(sound)))
+        for _ in range(80 * 2):  # 80 s of the stream, half a second at a time, looked at as it comes
+            self.heard.add(np.zeros(RATE // 2, np.float32))
+            self.now += 0.5
+            self.tracker.look()
+        # at once, 3 s + 5 s later, then after a minute's rest the same again (its second ask, at 81 s, is past 80 s)
+        self.assertEqual([when for when, _ in asked], [5.0, 13.0, 73.0])
+        self.assertEqual([at / RATE for _, at in asked[:2]], [0.0, 8.0])  # 5 s, a 3 s gap, the next 5 s
+
+    def test_the_next_song_is_asked_about_as_soon_as_one_is_over(self):
+        self.assertEqual(relay.NEXT_SONG_WAIT_S, 0)
+        self.heard.add(np.zeros(5 * RATE, np.float32))
+        self.tracker.playing = mock.Mock()  # a song was being taken out...
+        self.tracker._set(None)  # ...and it's over
+        self.assertEqual(self.tracker.ask_at, self.now)
+        self.tracker.look()
+        self.assertEqual(self.sent, [5 * RATE])  # asked straight away
 
     def test_a_refusal_stops_being_said_once_its_wait_is_over(self):
         self.tracker.recognize = mock.Mock(side_effect=songs.RateLimited("Shazam is getting too many requests"))
-        self.heard.add(np.zeros(10 * RATE, np.float32))
+        self.heard.add(np.zeros(5 * RATE, np.float32))
         self.tracker.look()
         self.assertEqual(self.problems, ["Shazam is getting too many requests, asking again in 60 s"])
         self.now += 59
