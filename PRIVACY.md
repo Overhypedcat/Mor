@@ -29,7 +29,7 @@ Nothing else is sent anywhere.
   again (at most 1 GB; the oldest are removed first).
 - **The helper's log:** what the music filter did, step by step (`%LOCALAPPDATA%\Mor\helper.log`, a few MB at most),
   for you to read or to send along with a problem report if you choose to.
-- **Your choices:** which channels you switched the music filter off for, and whether the 1440p unlock is on, kept
+- **Your choices:** which channels you switched the music filter on for, and whether the 1440p unlock is on, kept
   in Firefox's storage for the extension.
 
 ## Removing it
