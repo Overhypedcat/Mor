@@ -1,5 +1,6 @@
 import base64
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -9,7 +10,8 @@ from mor_helper.session import CHUNK, FilterSession
 
 
 class FakeTracker:
-    def __init__(self, heard, library, on_state, on_problem, on_ready=None, on_step=None, clock=None):
+    def __init__(self, heard, library, on_state, on_problem, on_ready=None, on_step=None, on_until=None,
+                 clock=None):
         self.heard, self.on_state, self.on_problem, self.on_ready = heard, on_state, on_problem, on_ready
         self.playing = None
         self.retried = 0
@@ -83,6 +85,15 @@ class SessionTests(unittest.TestCase):
         self.assertIn("problem Shazam is down", lines)
         self.assertEqual(lines[-1], "problem The music filter broke")
         self.assertTrue(all(m["sid"] == "tab1" for m in self.sent))
+
+    def test_a_filter_that_cant_start_says_why(self):
+        lines = []
+        session = FilterSession("t", lambda m: lines.append(m.get("line")), relay.Budget(lambda: 0.0),
+                                library=object(), tracker_factory=FakeTracker)
+        with mock.patch.object(relay, "_warm_up", side_effect=RuntimeError("deadlock detected")):
+            session._think()
+        self.assertEqual(lines[-1], "problem Music filter error | The music filter couldn't start: RuntimeError: "
+                                    "deadlock detected")
 
     def test_retry_reaches_the_tracker(self):
         self.session.retry()

@@ -62,6 +62,7 @@ class ProbeTests(unittest.TestCase):
         result = unlock.probe("x", "t", tunnel, SERVERS, lambda *a: (None, [], "Unauthorized: authorization failed"))
         self.assertEqual(tunnel.started, ["a"])
         self.assertIn("rejected the login", result["error"])
+        self.assertTrue(result["error"].startswith("Login rejected | "))
         self.assertFalse(tunnel.running())
 
     def test_nothing_answering_is_said(self):
@@ -69,9 +70,11 @@ class ProbeTests(unittest.TestCase):
         result = unlock.probe("x", "t", tunnel, SERVERS, lambda *a: (MASTER, [], None))
         self.assertIsNone(result["master"])
         self.assertIn("Couldn't connect to a", result["error"])
+        self.assertTrue(result["error"].startswith("VPN connect failed | "))
 
     def test_what_is_missing_is_said(self):
-        self.assertEqual(unlock.probe("x", "t", FakeTunnel(), [], lambda *a: None)["error"], "No VPN servers yet")
+        self.assertEqual(unlock.probe("x", "t", FakeTunnel(), [], lambda *a: None)["error"],
+                         "No VPN servers | No VPN servers yet")
         with mock.patch("mor_helper.vpn.wireproxy_path", return_value=None):
             self.assertIn("tunnel program is missing", unlock.probe("x", "t", FakeTunnel(), SERVERS)["error"])
 

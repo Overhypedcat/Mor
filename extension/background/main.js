@@ -117,13 +117,13 @@ const helper = {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.waiting.delete(id);
-        resolve({ error: "Mor's helper didn't answer in time" });
+        resolve({ error: "Helper timeout | Mor's helper didn't answer in time" });
       }, timeout);
       this.waiting.set(id, (reply) => { clearTimeout(timer); resolve(reply); });
       if (!this.post({ ...message, id })) {
         this.waiting.delete(id);
         clearTimeout(timer);
-        resolve({ error: this.error || "Mor's helper isn't running" });
+        resolve({ error: helperProblem(this.error || "Mor's helper isn't running") });
       }
     });
   },
@@ -157,6 +157,11 @@ browser.runtime.onInstalled.addListener((details) => {
   helper.connect(); // a missing helper answers at once, and the setup page opens
   helper.touch();
 });
+
+// The helper's state as a problem for the music filter or the unlock: a few words, then why (shared.js splitProblem).
+function helperProblem(why) {
+  return `${helper.missing ? "Helper missing" : "Helper stopped"}${Mor.SEP}${why || "Mor's helper stopped"}`;
+}
 
 function describeHelperError(text) {
   if (isMissing(text)) {
@@ -226,7 +231,7 @@ function onHelperGone(wasUp) {
   // crashed), the filter starts again with a fresh one, once (one that can't start at all isn't tried over and over)
   for (const [tabId, tab] of tabs) {
     if (tab.sid) {
-      tab.filter = { ...tab.filter, problem: helper.error || "Mor's helper stopped", state: "listening", playing: null };
+      tab.filter = { ...tab.filter, problem: helperProblem(helper.error), state: "listening", playing: null };
       tellState(tab);
       tab.port.postMessage({ type: "playing", sid: tab.sid, seq: -1, playing: null });
       sids.delete(tab.sid);
@@ -235,10 +240,10 @@ function onHelperGone(wasUp) {
     }
     if (vpnTabs.has(tabId)) {
       vpnTabs.delete(tabId);
-      tab.unlock = { via: false, error: helper.error || "Mor's helper stopped, the VPN went with it" };
+      tab.unlock = { via: false, error: helperProblem(helper.error || "Mor's helper stopped, the VPN went with it") };
     }
   }
-  for (const resolve of helper.waiting.values()) resolve({ error: helper.error || "Mor's helper stopped" });
+  for (const resolve of helper.waiting.values()) resolve({ error: helperProblem(helper.error) });
   helper.waiting.clear();
   for (const resolve of helper.serverWaiters.splice(0)) resolve({ servers: [], error: helper.error });
 }
@@ -264,7 +269,7 @@ browser.runtime.onConnect.addListener((port) => {
 });
 
 function freshFilter() {
-  return { state: "listening", problem: null, step: null, retryAt: 0, playing: null };
+  return { state: "listening", problem: null, step: null, retryAt: 0, stepUntil: 0, problemUntil: 0, playing: null };
 }
 
 function onTabMessage(tabId, tab, message) {
@@ -285,7 +290,7 @@ function onTabMessage(tabId, tab, message) {
       tab.filter = freshFilter();
       sids.set(message.sid, tabId);
       if (!helper.post({ type: "filter-start", sid: message.sid })) {
-        tab.filter.problem = helper.error;
+        tab.filter.problem = helperProblem(helper.error);
       }
       tellState(tab);
       break;
@@ -339,7 +344,7 @@ function toggleFilter(tab) {
 function retryFilter(tab) {
   if (!tab || !tab.sid) return false;
   if (!helper.post({ type: "retry", sid: tab.sid })) {
-    tab.filter = { ...tab.filter, problem: "Couldn't reach the music filter to retry" };
+    tab.filter = { ...tab.filter, problem: "Retry failed | Couldn't reach the music filter to retry" };
     tellState(tab);
     return false;
   }
@@ -383,10 +388,12 @@ async function twitchToken(cookieStoreId) {
 // Why the unlock can't be tried for this stream, or null when it can.
 function unlockBlocker(tab, token) {
   if (!settings.unlock) return "off";
-  if (tab && tab.hevc === false) return "This Firefox can't play HEVC, which 1440p streams are sent in";
-  if (!token) return "Log in to Twitch in Firefox to unlock 1440p";
-  if (helper.hello && !helper.hello.tunnel) return "The tunnel program is missing, run Install Mor.cmd again";
-  if (helper.hello && helper.hello.servers.length === 0) return "Add a VPN server to unlock 1440p";
+  if (tab && tab.hevc === false) return "No HEVC | This Firefox can't play HEVC, which 1440p streams are sent in";
+  if (!token) return "Not logged in | Log in to Twitch in Firefox to unlock 1440p";
+  if (helper.hello && !helper.hello.tunnel) {
+    return "Tunnel missing | The tunnel program is missing, run Install Mor.cmd again";
+  }
+  if (helper.hello && helper.hello.servers.length === 0) return "No VPN servers | Add a VPN server to unlock 1440p";
   return null;
 }
 
@@ -410,7 +417,7 @@ browser.webRequest.onBeforeRequest.addListener((details) => {
     try {
       master = await answer(direct);
     } catch (error) {
-      noteUnlock(details.tabId, { via: false, error: `The 1440p unlock ran into an error: ${error.message}` });
+      noteUnlock(details.tabId, { via: false, error: `Unlock error | The 1440p unlock ran into an error: ${error.message}` });
     }
     if (master) filter.write(new TextEncoder().encode(master));
     else for (const part of parts) filter.write(part);
@@ -486,7 +493,9 @@ browser.proxy.onRequest.addListener((details) => {
 }, { urls: TUNNEL_HOSTS });
 
 browser.proxy.onError.addListener((error) => {
-  for (const [tabId] of vpnTabs) noteUnlock(tabId, { via: true, error: `The VPN tunnel failed: ${error.message}` });
+  for (const [tabId] of vpnTabs) {
+    noteUnlock(tabId, { via: true, error: `Tunnel failed | The VPN tunnel failed: ${error.message}` });
+  }
 });
 
 // the hub

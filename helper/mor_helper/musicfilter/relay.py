@@ -57,6 +57,11 @@ JUMP = HOP  # the song's place moving by more than this: the cancellers start ov
 # the song's place found a few samples off from where it was is no move: lining up wavers that much with the voice
 # over it, and the shape already covers such a little delay; following each would cost the shape its fine tuning
 WAVER = align.REACH
+# what it's doing, as the pill on the player and the hub say it (status.py): a few words, never a song's name
+LISTENING_STEP = "Listening"
+ASKING_STEP = "Asking Shazam"
+REMOVING_STEP = "Removing song"
+LOST_STEP = "Lost sync, searching"
 RETRIES = 2  # a song Shazam named that couldn't be taken out yet (no copy lined up, or none could be had) is tried
 # again this many times without asking Shazam again: a first try can fail on talking over it, or a download
 
@@ -159,10 +164,14 @@ class Tracker:
     hears LISTENING or FILTERING, on_problem what went wrong."""
 
     def __init__(self, heard, library, on_state, on_problem, recognize=songs.recognize, load=songs.load,
-                 clock=time.monotonic, on_ready=None, on_step=None):
+                 clock=time.monotonic, on_ready=None, on_step=None, on_until=None):
         self.heard, self.library, self.on_state, self.on_problem = heard, library, on_state, on_problem
         self.on_ready = on_ready or (lambda seconds: None)  # hears the seconds until Shazam may be asked again
-        self.on_step = on_step or (lambda text: None)  # hears what it's doing just now, for the app's box
+        # hears what it's doing just now, in a few words and never a song's name (status.py)
+        self.on_step = on_step or (lambda text: None)
+        # hears a countdown for the step or the problem just told (status.STEP or PROBLEM, seconds)
+        self.on_until = on_until or (lambda which, seconds: None)
+        self.resting = False  # no music for a while: Shazam rests until ask_at
         self.retry_wanted = False  # the app's retry button: handled at the next look (set from another thread)
         self.round = 0  # retries so far: each has the cancellers start afresh
         self.avoid = None  # (song key, video id) of a copy a retry gave up on: tried last, if no other lines up
@@ -215,13 +224,29 @@ class Tracker:
             self.limited += 1
             self.shazam_after = self.clock() + wait  # only Shazam waits: following the song goes on
             self.refused = True
-            self.on_problem(f"{problem}, asking again in {wait} s")
+            self.on_problem(status.problem(problem.short, f"{problem}, asking again in {wait} s"))
+            self.on_until(status.PROBLEM, wait)
             self._tell_ready()
+            self._idle()
         except songs.Problem as problem:  # Shazam or YouTube couldn't be reached: the next look tries again
-            self.on_problem(str(problem))
+            self.on_problem(status.problem(problem.short, str(problem)))
+            self._idle()
         except Exception as error:  # never the stream's end, but always said
-            self.on_problem(f"The music filter ran into an error: {type(error).__name__}: {songs.reason(error)}")
+            self.on_problem(status.problem("Music filter error", "The music filter ran into an error: "
+                                           f"{type(error).__name__}: {songs.reason(error)}"))
             self.next_at = self.clock() + LISTEN_S
+            self._idle()
+
+    def _idle(self):
+        """The step while nothing else is being done: following the song, or listening (resting, for how long)."""
+        if self.playing:
+            self.on_step(LOST_STEP if self.misses else REMOVING_STEP)
+        elif self.resting and self.ask_at > self.clock():
+            self.on_step("Resting")
+            self.on_until(status.STEP, self.ask_at - self.clock())
+        else:
+            self.resting = False
+            self.on_step(LISTENING_STEP)
 
     def _check(self):
         """Is the song still where it's thought to be? Follows it when it moved; lets go when it's gone."""
@@ -237,7 +262,7 @@ class Tracker:
             at, _ = align.still(sound, Mono(playing.sound), playing.reduced, start + playing.offset)
         if at is None:
             self.misses += 1
-            self.on_step(f"Lost {playing.song}, looking for it")
+            self.on_step(LOST_STEP)
             if self.misses >= LOST:
                 self._set(None)
                 return
@@ -245,7 +270,7 @@ class Tracker:
                 self._ask_again(playing)
             return
         if self.misses:
-            self.on_step(f"Removing {playing.song}")  # found again
+            self.on_step(REMOVING_STEP)  # found again
         self.misses = 0
         if self.clock() >= self.shazam_after:
             self.on_problem(None)  # the song is where it should be: all is well (but Shazam's refusal still holds)
@@ -266,7 +291,8 @@ class Tracker:
         be."""
         wait = self._shazam_wait()
         if wait > 0:
-            self.on_problem(f"Shazam can be asked again in {math.ceil(wait)} s")
+            self.on_problem(status.problem("Shazam busy", f"Shazam can be asked again in {math.ceil(wait)} s"))
+            self.on_until(status.PROBLEM, wait)
             self._tell_ready()
             return
         playing = self.playing
@@ -276,7 +302,7 @@ class Tracker:
         self.unusable.clear()
         self.mismatched.clear()
         self.shifts.clear()
-        self.on_step("Retrying from the start")
+        self.on_step("Restarting")
         self._set(None, wait=0)
         self._listen(fresh=True)
 
@@ -319,18 +345,20 @@ class Tracker:
         if at is not None:
             self.misses = 0
             self.playing = playing.moved_to(at - start)
-            self.on_step(f"Removing {playing.song}")
+            self.on_step(REMOVING_STEP)
             return
         if self.misses not in SHAZAM_ON_MISSES or self._shazam_wait():
             return  # (out of budget: the song is held on to meanwhile, and Shazam asked at a later miss)
         sound, self.asked_from = self.heard.latest(ASK_S * RATE)
         self._take()
-        self.on_step("The song changed, asking Shazam what's on")
+        self.on_step(ASKING_STEP)
         song = self.recognize(sound)
         self.limited = 0
         if song and song != playing.song:
             self._set(None, wait=0)  # (Shazam just named the next one)
             self._listen(song)
+        else:
+            self.on_step(LOST_STEP)  # the same song, or none: still looked for in its copy
 
     def _listen(self, song=None, fresh=False):
         """Ask Shazam (unless it just named the song); for a song it knows, find a copy that lines up with the
@@ -350,39 +378,39 @@ class Tracker:
             wait = max(self._shazam_wait(), self.ask_at - now)
             if wait > 0:
                 self.next_at = now + min(wait, KNOWN_S)  # meanwhile still looked for among the songs heard before
+                self._idle()
                 return
+            self.resting = False
             self._take()
             self.ask_at = now + listen_wait(self.tries)
             self.next_at = min(self.next_at, self.ask_at)  # the next look: a local one, or Shazam's if sooner
             self.asked_from = sound_from
-            self.on_step("Asking Shazam what's playing")
+            self.on_step(ASKING_STEP)
             song = self.recognize(sound)
             self.limited = 0  # Shazam answered
         if not song:
             self.tries += 1  # only an answer counts as a try: Shazam out of reach says nothing about the music
             if self.tries % NOTHING_RUN == 0:
                 self.ask_at = self.clock() + NOTHING_REST_S
-                self.on_step("No music found, resting a minute")
-            else:
-                self.on_step("Listening for music")
+                self.resting = True
+            self._idle()  # resting a minute, or listening for the next try
             self.on_problem(None)  # Shazam answered: whatever failed before works again
             return  # nothing Shazam knows playing: talking, or a song it hasn't got
         if song.key in self.unusable:
             self.on_problem(self.unusable[song.key])
             self.ask_at = self.clock() + UNUSABLE_S  # still that song: Shazam needn't be asked again so soon
+            self._idle()
             return
         compared, failed = False, None
-        self.on_step(f"Finding {song} on YouTube")
+        self.on_step("Finding a copy")
         for video_id in self._copies(song):
             try:
-                if video_id not in self.loaded:
-                    self.on_step(f"Getting {song}")
                 sound, reduced = self._copy(video_id)
             except songs.Problem as problem:
-                failed = str(problem)  # this copy can't be had; another might
+                failed = problem  # this copy can't be had; another might
                 continue
             compared = True
-            self.on_step(f"Lining up {song}")
+            self.on_step("Lining up")
             heard, start = self.heard.latest(MATCH_S * RATE)
             if heard is None:
                 heard, start = self.heard.latest(ASK_S * RATE)
@@ -401,18 +429,25 @@ class Tracker:
         if compared and song.key not in self.mismatched:  # once could be talking over it: tried again
             self.mismatched.add(song.key)
             self._try_again(song)
-            self.on_problem(f"YouTube's copy of {song} doesn't line up with the stream yet, trying again")
+            self.on_problem(status.problem("No match yet", f"YouTube's copy of {song} doesn't line up with the "
+                                           "stream yet, trying again"))
+            self.on_step("Retrying")
+            self.on_until(status.STEP, LISTEN_S)
             return
         if compared:
-            self.unusable[song.key] = f"YouTube has only other versions of {song} than the one playing"
+            self.unusable[song.key] = status.problem("Only other versions",
+                                                     f"YouTube has only other versions of {song} than the one playing")
         elif failed:  # not held against the song: it may download next time
             self._try_again(song)
-            self.on_problem(f"Couldn't get {song} from YouTube: {failed}")
+            self.on_problem(status.problem(failed.short, f"Couldn't get {song} from YouTube: {failed}"))
+            self.on_step("Retrying")
+            self.on_until(status.STEP, LISTEN_S)
             return
         else:
-            self.unusable[song.key] = f"{song} isn't on YouTube Music or YouTube"
+            self.unusable[song.key] = status.problem("Not on YouTube", f"{song} isn't on YouTube Music or YouTube")
         self.on_problem(self.unusable[song.key])
         self.ask_at = self.clock() + UNUSABLE_S
+        self._idle()
 
     def _known(self):
         """The song playing, if it's one heard before (by the prints of the copies kept), else None. Looked for in
@@ -425,6 +460,7 @@ class Tracker:
         before = self.library.heard_before()[:KNOWN_MAX]
         if heard is None or not before:
             return None
+        self.on_step("Checking known songs")
         prints = []
         for _, _, path in before:
             try:
@@ -443,7 +479,11 @@ class Tracker:
     def _copy(self, video_id):
         """(16-bit stereo sound, its reduction for lining up) of a YouTube song; Problem when it can't be had."""
         if video_id not in self.loaded:
+            stored = getattr(self.library, "path", None)
+            if not (stored and stored(video_id)):
+                self.on_step("Downloading")
             path = self.library.fetch(video_id)
+            self.on_step("Decoding")
             try:
                 sound = self.load(path)
             except songs.Problem:
@@ -460,21 +500,26 @@ class Tracker:
     def _set(self, playing, wait=NEXT_SONG_WAIT_S):
         """The song being taken out now, or None; with None, Shazam is asked what's next after wait s."""
         had = self.playing is not None
-        self.playing, self.misses, self.tries, self.retry = playing, 0, 0, None
+        self.playing, self.misses, self.tries, self.retry, self.resting = playing, 0, 0, None, False
         # a song just over: the next one is asked about after a moment (none before: at once)
         self.ask_at = self.clock() + wait if had and not playing else 0.0
         self.next_at = self.clock() + (CHECK_S if playing else 0)
         self.on_state(status.FILTERING if playing else status.LISTENING)
-        self.on_step(f"Removing {playing.song}" if playing else "Listening for music")
+        self.on_step(REMOVING_STEP if playing else LISTENING_STEP)
+
+
+_WARM_UP = threading.Lock()  # tabs starting together would otherwise import the same modules at once (a deadlock)
 
 
 def _warm_up():
     """Load what recognizing and fetching use before the first song comes, not while it plays (seconds of it)."""
     try:
-        import shazamio  # noqa: F401
-        import yt_dlp  # noqa: F401
+        with _WARM_UP:
+            import shazamio  # noqa: F401
+            import yt_dlp  # noqa: F401
     except ImportError as error:
-        raise songs.Problem(f"The music filter is missing a part, set it up again: {songs.reason(error)}") from error
+        raise songs.Problem(f"The music filter is missing a part, set it up again: {songs.reason(error)}",
+                            "Setup incomplete") from error
 
 
 class Filter:
@@ -503,8 +548,9 @@ class Filter:
                                        for ch, c in enumerate(self.cancellers)])
                 except Exception as error:  # the filter must never stop the sound: from now on it goes through
                     self.broken = True
-                    self.on_problem(f"The music filter broke, the sound plays unfiltered: {type(error).__name__}: "
-                                    f"{songs.reason(error)}", lasting=True)
+                    self.on_problem(status.problem("Filter broke", "The music filter broke, the sound plays "
+                                                   f"unfiltered: {type(error).__name__}: {songs.reason(error)}"),
+                                    lasting=True)
             if self.broken:  # still DELAY behind, so it stays in step with the picture
                 joined = np.concatenate([self.held, block], axis=1)
                 result, self.held = joined[:, :HOP], joined[:, HOP:]

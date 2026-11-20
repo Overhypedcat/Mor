@@ -154,7 +154,7 @@ test("without a Twitch login nothing is asked, and the hub says what's needed", 
   assert.strictEqual(await finish(m.filters[0], MASTER_DIRECT), MASTER_DIRECT);
   assert.ok(!m.natives.some((p) => p.sent.some((x) => x.type === "unlock")));
   const state = await m.ask({ type: "hub-state", tabId: 1 });
-  assert.match(state.tab.unlock.error, /Log in to Twitch/);
+  assert.match(state.tab.unlock.error, /^Not logged in \| Log in to Twitch/);
 });
 
 test("leaving the channel takes the tab off the tunnel; the last one off stops it", async () => {
@@ -274,7 +274,7 @@ test("a helper that isn't installed is said in words the user can act on", async
   const state = await m.ask({ type: "hub-state", tabId: 1 });
   assert.match(state.helper.error, /Mor needs its helper on this PC: click Mor's button in the toolbar/);
   assert.strictEqual(state.helper.missing, true); // the hub shows how to set it up
-  assert.match(state.tab.filter.problem, /Mor needs its helper/); // and the player says so
+  assert.match(state.tab.filter.problem, /^Helper missing \| Mor needs its helper/); // and the player says so
 });
 
 test("a helper that stops is told to each tab using it", async () => {
@@ -286,7 +286,7 @@ test("a helper that stops is told to each tab using it", async () => {
   m.natives.at(-1).onDisconnect.fire({ error: { message: "crashed" } });
   const state = await m.ask({ type: "hub-state", tabId: 1 });
   assert.strictEqual(state.helper.error, "Mor's helper stopped: crashed");
-  assert.strictEqual(state.tab.filter.problem, "Mor's helper stopped: crashed");
+  assert.strictEqual(state.tab.filter.problem, "Helper stopped | Mor's helper stopped: crashed");
   same(told(port).at(-1), { type: "filter", on: true, restart: true }); // once, with a fresh helper
 });
 

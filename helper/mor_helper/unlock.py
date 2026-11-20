@@ -10,6 +10,7 @@ from streamlink import Streamlink
 from streamlink.options import Options
 
 from mor_helper import vpn
+from mor_helper.musicfilter.status import problem as told
 
 USHER = ("https://usher.ttvnw.net/api/v2/channel/hls/", "https://usher.ttvnw.net/api/channel/hls/")
 NOT_QUALITIES = {"worst", "best", "audio_only"}
@@ -47,9 +48,9 @@ def probe(channel, token, tunnel, servers=None, fetcher=fetch):
     the server that answered (the tab's video goes through it); when none did it's stopped."""
     servers = vpn.configs() if servers is None else servers
     if not vpn.wireproxy_path():
-        return _failed("The tunnel program is missing, run Mor's installer again")
+        return _failed(told("Tunnel missing", "The tunnel program is missing, run Mor's installer again"))
     if not servers:
-        return _failed("No VPN servers yet")
+        return _failed(told("No VPN servers", "No VPN servers yet"))
     error = None
     ordered = sorted(servers, key=lambda conf: conf != tunnel.conf)  # the one up already first: no restart
     for conf in ordered:
@@ -65,8 +66,12 @@ def probe(channel, token, tunnel, servers=None, fetcher=fetch):
             break  # the token, not the server: no point trying the others
     tunnel.stop()
     if error and "authorization" in error.lower():
-        error = "Twitch rejected the login, log in to Twitch in Firefox again"
-    return _failed(error or "No VPN server answered")
+        return _failed(told("Login rejected", "Twitch rejected the login, log in to Twitch in Firefox again"))
+    if error and error.startswith("Couldn't connect"):
+        return _failed(told("VPN connect failed", error))
+    if error and error.endswith("isn't live through the VPN"):
+        return _failed(told("Not live via VPN", error))
+    return _failed(told("No server answered", error or "No VPN server answered"))
 
 
 def _failed(error):

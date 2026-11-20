@@ -32,11 +32,18 @@ ASK_S = 10  # one try at asking Shazam, at most this long: the filter asks again
 
 
 class Problem(Exception):
-    """Something the user is told about: the message says what went wrong and why."""
+    """Something the user is told about: the message says what went wrong and why, short in a few words (status.py)."""
+
+    def __init__(self, message, short="Music filter problem"):
+        super().__init__(message)
+        self.short = short
 
 
 class RateLimited(Problem):
     """Shazam is getting too many requests from this connection: it's asked again only after a while."""
+
+    def __init__(self, message, short="Shazam rate limit"):
+        super().__init__(message, short)
 
 
 @dataclass(frozen=True)
@@ -118,7 +125,7 @@ def recognize(sound, rate=RATE):
     except Exception as error:  # no connection, Shazam busy or changed
         if type(error).__name__ == "RateLimited":  # shazamio.exceptions.RateLimited
             raise RateLimited("Shazam is getting too many requests from this connection") from error
-        raise Problem(f"Shazam couldn't be asked what's playing: {reason(error)}") from error
+        raise Problem(f"Shazam couldn't be asked what's playing: {reason(error)}", "Shazam unreachable") from error
     return song_of(answer)
 
 
@@ -218,7 +225,7 @@ class Library:
                 return candidate_ids(ydl.extract_info(search_url(song, source), download=False).get("entries"))
         except Exception as error:
             why = short_reason(log.last or reason(error))
-            raise Problem(f"Searching {source} for {song} failed: {why}") from error
+            raise Problem(f"Searching {source} for {song} failed: {why}", "YouTube search failed") from error
 
     def path(self, video_id):
         """The downloaded copy of this YouTube song, if it's here."""
@@ -236,7 +243,7 @@ class Library:
         from mor_helper.youtube import _Quiet, js_runtimes, short_reason
         runtimes = js_runtimes()
         if not runtimes:
-            raise Problem("Downloading from YouTube needs Node.js or Deno installed")
+            raise Problem("Downloading from YouTube needs Node.js or Deno installed", "Node.js missing")
         self.root.mkdir(parents=True, exist_ok=True)
         log = _Quiet()
         options = {"quiet": True, "logger": log, "format": "bestaudio", "noprogress": True,
@@ -245,11 +252,11 @@ class Library:
             with yt_dlp.YoutubeDL(options) as ydl:
                 ydl.download([f"https://www.youtube.com/watch?v={video_id}"])  # YouTube Music's songs too
         except Exception as error:
-            raise Problem(short_reason(log.last or reason(error))) from error
+            raise Problem(short_reason(log.last or reason(error)), "Download failed") from error
         self.make_room()
         have = self.path(video_id)
         if not have:
-            raise Problem(short_reason(log.last) if log.last else "the download left no file")
+            raise Problem(short_reason(log.last) if log.last else "the download left no file", "Download failed")
         return have
 
     def make_room(self, keep=KEEP_BYTES):
@@ -276,13 +283,13 @@ def load(path, rate=RATE):
     try:
         with av.open(str(path)) as container:
             if not container.streams.audio:
-                raise Problem("the download has no sound in it")
+                raise Problem("the download has no sound in it", "Unreadable copy")
             resampler = av.AudioResampler(format="s16p", layout="stereo", rate=rate)
             parts = [f.to_ndarray() for frame in container.decode(container.streams.audio[0])
                      for f in resampler.resample(frame)]
             parts += [f.to_ndarray() for f in resampler.resample(None)]
     except (av.FFmpegError, OSError) as error:
-        raise Problem(f"the download couldn't be read: {reason(error)}") from error
+        raise Problem(f"the download couldn't be read: {reason(error)}", "Unreadable copy") from error
     if not parts:
-        raise Problem("the download has no sound in it")
+        raise Problem("the download has no sound in it", "Unreadable copy")
     return np.concatenate(parts, axis=1)

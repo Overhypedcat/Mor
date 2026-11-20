@@ -327,7 +327,8 @@ class Filter {
           result = [0, 1].map((ch) => this.cancellers[ch].process(block[ch], song === null ? null : song[ch]));
         } catch (error) { // the filter must never stop the sound: from now on it goes through
           this.broken = true;
-          this.onProblem(`The music filter broke, the sound plays unfiltered: ${error.name}: ${error.message}`);
+          this.onProblem(`Filter broke | The music filter broke, the sound plays unfiltered: ${error.name}: `
+            + error.message);
         }
       }
       if (this.broken) { // still DELAY behind, so it stays in step

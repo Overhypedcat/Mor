@@ -39,7 +39,7 @@
     </div>
     <div class="status" id="filter-status" hidden>
       <span class="dot" id="filter-dot"></span>
-      <p id="filter-text"></p>
+      <div class="lines"><p class="main" id="filter-text"></p><p class="detail" id="filter-detail" hidden></p></div>
       <button class="retry" id="filter-retry" aria-label="Ask Shazam again" title="Ask Shazam again">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" /><path d="M19.5 4.5v4h-4" /></svg>
         <span id="filter-wait"></span>
@@ -57,7 +57,7 @@
     </div>
     <div class="status" id="unlock-status" hidden>
       <span class="dot" id="unlock-dot"></span>
-      <p id="unlock-text"></p>
+      <div class="lines"><p class="main" id="unlock-text"></p><p class="detail" id="unlock-detail" hidden></p></div>
     </div>
     <details class="drawer" id="servers-drawer">
       <summary id="servers-summary">VPN servers</summary>

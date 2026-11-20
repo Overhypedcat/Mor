@@ -20,7 +20,8 @@
   let sid = null;
   let copy = null; // a song's copy on its way: {id, length, buffer, got, parts}
   let audioProblem = null;
-  let filterState = { state: "listening", problem: null, step: null, retryAt: 0 }; // as the background last said
+  // as the background last said
+  let filterState = { state: "listening", problem: null, step: null, retryAt: 0, stepUntil: 0, problemUntil: 0 };
   const row = new PlayerRow.Row(() => { if (sid) tell({ type: "retry", sid }); });
 
   function tell(message) {
@@ -67,7 +68,7 @@
       try { await context.resume(); } catch (error) { /* told below */ }
     }
     if (context.state !== "running") {
-      setAudioProblem("Click the stream once so Mor can hear it");
+      setAudioProblem("Click the stream | Firefox lets Mor hear the stream only after a click on the page");
       return false;
     }
     setAudioProblem(null);
@@ -136,7 +137,8 @@
     if (message.type === "heard") tell({ type: "heard", sid, samples: message.samples });
     else if (message.type === "broken") tell({ type: "broken", sid, text: message.text });
     else if (message.type === "broken-copy") {
-      tell({ type: "broken", sid, text: "The song's copy didn't arrive whole, the filter waits for the next" });
+      tell({ type: "broken", sid, text: "Copy incomplete | The song's copy didn't arrive whole, the filter waits "
+        + "for the next" });
     }
   }
 
@@ -193,7 +195,7 @@
     try {
       await startFilter(v);
     } catch (error) {
-      setAudioProblem(`Mor couldn't reach the stream's sound: ${error.message}`);
+      setAudioProblem(`No stream sound | Mor couldn't reach the stream's sound: ${error.message}`);
     } finally {
       starting = false;
     }

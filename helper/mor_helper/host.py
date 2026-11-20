@@ -15,11 +15,11 @@ import time
 import traceback
 
 from mor_helper import paths, unlock, vpn
-from mor_helper.musicfilter import relay, songs
+from mor_helper.musicfilter import relay, songs, status
 from mor_helper.session import FilterSession
 from mor_helper.youtube import js_runtimes
 
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 log = logging.getLogger("mor")
 
 
@@ -134,7 +134,8 @@ class Host:
             except Exception as error:
                 log.error("unlock: %s", traceback.format_exc())
                 result = {"master": None, "qualities": [], "port": None, "server": None,
-                          "error": f"The 1440p unlock ran into an error: {type(error).__name__}: {songs.reason(error)}"}
+                          "error": status.problem("Unlock error", "The 1440p unlock ran into an error: "
+                                                  f"{type(error).__name__}: {songs.reason(error)}")}
         self.send({"type": "unlock", "id": message.get("id"), "channel": message["channel"], **result})
 
     def setup(self):

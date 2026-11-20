@@ -90,6 +90,16 @@ const Mor = (() => {
     return name;
   }
 
+  // A problem as the helper and the extension tell it: a few words, then (after SEP) the whole story, or just the
+  // few words (helper/.../status.py). -> [few words, whole story or null]
+  const SEP = " | ";
+
+  function splitProblem(text) {
+    const at = (text || "").indexOf(SEP);
+    if (at < 0) return [text || "", null];
+    return [text.slice(0, at), text.slice(at + SEP.length)];
+  }
+
   // The music filter's lines ('problem Shazam is down'): [kind, detail] or null (helper/.../status.py).
   function parseStatus(text) {
     const trimmed = (text || "").trim();
@@ -99,6 +109,7 @@ const Mor = (() => {
     if (kind === "listening" || kind === "filtering" || kind === "fine") return [kind, null];
     if ((kind === "problem" || kind === "step") && detail) return [kind, detail];
     if (kind === "ready" && /^\d+$/.test(detail)) return [kind, detail];
+    if (kind === "until" && /^(step|problem) \d+$/.test(detail)) return [kind, detail];
     return null;
   }
 
@@ -108,11 +119,14 @@ const Mor = (() => {
     if (!parsed) return state;
     const [kind, detail] = parsed;
     const next = { ...state };
-    if (kind === "problem") next.problem = detail;
-    else if (kind === "fine") next.problem = null;
-    else if (kind === "step") next.step = detail;
+    if (kind === "problem") { next.problem = detail; next.problemUntil = 0; }
+    else if (kind === "fine") { next.problem = null; next.problemUntil = 0; }
+    else if (kind === "step") { next.step = detail; next.stepUntil = 0; }
     else if (kind === "ready") next.retryAt = now + Number(detail) * 1000;
-    else {
+    else if (kind === "until") {
+      const [which, seconds] = detail.split(" ");
+      next[`${which}Until`] = now + Number(seconds) * 1000;
+    } else {
       next.state = kind;
       if (kind === "filtering") next.problem = null;
     }
@@ -147,13 +161,29 @@ const Mor = (() => {
     return [code, `${COUNTRIES[code] || code} · Free ${m[3]}`];
   }
 
-  // What the music filter's text on the player says: what went wrong, else what it's doing, else that it's off.
-  function rowText(on, filter, audioProblem) {
-    if (!on) return { text: "Off", problem: false };
-    const problem = audioProblem || filter.problem;
-    if (problem) return { text: problem, problem: true };
-    if (filter.step) return { text: filter.step, problem: false };
-    return { text: filter.state === "filtering" ? "Removing the song" : "Listening for music", problem: false };
+  // Seconds left until a time (0 when it's past or unset), for the countdowns the helper sends.
+  function secondsLeft(until, now) {
+    return until ? Math.max(0, Math.ceil((until - now) / 1000)) : 0;
+  }
+
+  function counted(text, until, now) {
+    const left = secondsLeft(until, now);
+    return left > 0 ? `${text} ${left} s` : text;
+  }
+
+  // What the music filter says, on the player and in the hub, in a few words: what went wrong, else what it's
+  // doing, counting down what has a known end. detail: a problem's whole story (the tooltip, the hub), else null.
+  function rowText(on, filter, audioProblem, now = Date.now()) {
+    if (!on) return { text: "Off", problem: false, detail: null };
+    const f = filter || {};
+    const problem = audioProblem || f.problem;
+    if (problem) {
+      const [short, detail] = splitProblem(problem);
+      const text = audioProblem ? short : counted(short, f.problemUntil, now);
+      return { text, problem: true, detail: detail || null };
+    }
+    if (f.step) return { text: counted(f.step, f.stepUntil, now), problem: false, detail: null };
+    return { text: f.state === "filtering" ? "Removing song" : "Listening", problem: false, detail: null };
   }
 
   // Whether the helper on this PC is older than the extension (Firefox updates the extension by itself; the helper
@@ -168,7 +198,7 @@ const Mor = (() => {
   }
 
   return { helperOutdated, isQuality, qualities, unlockedOnly, needsVpn, usherChannel, pageChannel, parseStatus, applyStatus,
-    toBase64, fromBase64, serverLabel, rowText };
+    toBase64, fromBase64, serverLabel, rowText, splitProblem, secondsLeft, SEP };
 })();
 
 if (typeof module !== "undefined") module.exports = Mor;

@@ -68,7 +68,8 @@ Running `Install Mor.cmd` again repairs or updates Mor. Nothing needs admin righ
 ## Using Mor
 
 On a Twitch channel's live stream, Twitch's player controls show what the music filter is doing, next to Twitch's
-own buttons: "Listening for music", "Removing Artist - Song", or what went wrong.
+own buttons, in a few words as it happens: "Listening", "Asking Shazam", "Downloading", "Lining up", "Removing
+song", "Resting 52 s", or what went wrong in red (hover over it for the whole story).
 
 Mor's toolbar button opens its hub:
 

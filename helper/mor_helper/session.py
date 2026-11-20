@@ -52,7 +52,8 @@ class FilterSession:
         self.heard = relay.Heard()
         self.teller = status.Server(self._tell)
         self.tracker = tracker_factory(self.heard, library or songs.Library(), self.teller.set, self.teller.report,
-                                       on_ready=self.teller.ready, on_step=self.teller.step, clock=clock)
+                                       on_ready=self.teller.ready, on_step=self.teller.step,
+                                       on_until=self.teller.until, clock=clock)
         self.tracker.budget = budget
         self._log_copies()
         self.stopped = threading.Event()
@@ -104,7 +105,12 @@ class FilterSession:
         try:
             relay._warm_up()
         except songs.Problem as problem:
-            self.teller.report(str(problem), lasting=True)
+            self.teller.report(status.problem(problem.short, str(problem)), lasting=True)
+            return
+        except Exception as error:  # never a thread ending unsaid: the filter would just stay "Listening"
+            log.error("%s warm-up: %s", self.sid, error)
+            self.teller.report(status.problem("Music filter error", "The music filter couldn't start: "
+                                              f"{type(error).__name__}: {songs.reason(error)}"), lasting=True)
             return
         while not self.stopped.is_set():
             self.tracker.look()

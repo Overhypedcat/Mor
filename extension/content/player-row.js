@@ -1,6 +1,6 @@
 // What the music filter is doing, in Twitch's player controls, first among the buttons on the right: a retry button
-// and a line of text ("Listening for music", "Removing Artist - Song"; what went wrong, in red), framed together in a
-// thin capsule. It's part of Twitch's control bar, so it shows, hides and lays out with Twitch's own buttons. Only
+// and a few words ("Listening", "Asking Shazam", "Removing song", "Resting 52 s"; what went wrong in red, the whole
+// story in its tooltip), framed together in a thin capsule. It's part of Twitch's control bar, so it shows, hides and lays out with Twitch's own buttons. Only
 // while the filter is on for the channel: it's switched from Mor's hub.
 "use strict";
 
@@ -107,15 +107,15 @@ const PlayerRow = (() => {
 
     // model: {on, filter, audio, running (the filter has started, so a retry can reach it)}; now: Date.now().
     update(model, now = Date.now()) {
-      const { text, problem } = Mor.rowText(model.on, model.filter, model.audio);
+      const { text, problem, detail } = Mor.rowText(model.on, model.filter, model.audio, now);
       const wait = retryWait(model.filter, now);
       const canRetry = Boolean(model.running) && wait === 0;
-      const key = model.on ? JSON.stringify([text, problem, canRetry, wait]) : null;
+      const key = model.on ? JSON.stringify([text, problem, detail, canRetry, wait]) : null;
       if (key === this.drawn) return;
       this.drawn = key;
       this.host.hidden = !model.on;
       this.text.textContent = model.on ? text : "";
-      this.text.title = model.on ? text : "";
+      this.text.title = model.on ? detail || text : "";
       this.text.classList.toggle("problem", problem);
       this.retry.disabled = !canRetry;
       this.retry.title = wait > 0 ? `Look for the song again (in ${wait} s)` : "Look for the song again";

@@ -124,13 +124,13 @@ test("an empty group still gets the text", () => {
   assert.deepStrictEqual(order(group), ["div", "empty"]);
 });
 
-const filtering = { state: "filtering", problem: null, step: "Removing A - B", retryAt: 0 };
+const filtering = { state: "filtering", problem: null, step: "Removing song", retryAt: 0 };
 
 test("the retry button sits left of the text, and pressing it retries (and stays Mor's click)", () => {
   let retried = 0;
   const row = new Row(() => { retried += 1; });
   row.update({ on: true, filter: filtering, audio: null, running: true }, 1000);
-  assert.strictEqual(row.text.textContent, "Removing A - B");
+  assert.strictEqual(row.text.textContent, "Removing song");
   assert.strictEqual(row.retry.disabled, false);
   const capsule = row.retry.parentElement;
   assert.deepStrictEqual(capsule.children.map((c) => c.name), ["button", "span"]);
@@ -156,10 +156,22 @@ test("hidden while the filter is off; problems in red", () => {
   const row = new Row();
   row.update({ on: false, filter: filtering, audio: null, running: false });
   assert.strictEqual(row.host.hidden, true);
-  row.update({ on: true, filter: { ...filtering, problem: "Shazam is busy" }, audio: null, running: true });
+  row.update({ on: true, filter: { ...filtering, problem: "Shazam busy | Shazam can be asked again in 20 s" },
+    audio: null, running: true });
   assert.strictEqual(row.host.hidden, false);
-  assert.strictEqual(row.text.textContent, "Shazam is busy");
+  assert.strictEqual(row.text.textContent, "Shazam busy");
+  assert.strictEqual(row.text.title, "Shazam can be asked again in 20 s"); // the whole story, on hover
   assert.strictEqual(row.text.classList.contains("problem"), true);
+});
+
+test("a countdown ticks on the player", () => {
+  const row = new Row();
+  const resting = { ...filtering, state: "listening", step: "Resting", stepUntil: 60000 };
+  row.update({ on: true, filter: resting, audio: null, running: true }, 1000);
+  assert.strictEqual(row.text.textContent, "Resting 59 s");
+  row.update({ on: true, filter: resting, audio: null, running: true }, 2000);
+  assert.strictEqual(row.text.textContent, "Resting 58 s");
+  assert.strictEqual(row.text.title, "Resting 58 s");
 });
 
 test("seconds to wait for a retry", () => {

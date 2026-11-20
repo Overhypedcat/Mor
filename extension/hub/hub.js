@@ -34,42 +34,42 @@ function renderHelper() {
   for (const id of ["filter-card", "unlock-card"]) show($(id), !h.missing);
   const el = $("helper");
   el.className = "helper " + (h.connected ? "up" : h.error || h.missing ? "down" : "");
-  el.textContent = h.connected ? "Helper running" : h.missing ? "Helper not installed"
+  el.textContent = h.connected ? "Helper on" : h.missing ? "Helper missing"
     : h.error ? "Helper stopped" : "Starting helper";
   const problems = [];
   if (h.error && !h.missing) problems.push(h.error);
   if (h.connected && h.javascript === false) {
-    problems.push("Getting songs from YouTube needs Node.js: run Install Mor.cmd again");
+    problems.push("Node.js missing: run Install Mor.cmd again");
   }
   if (h.lastError) problems.push(h.lastError);
   const mine = browser.runtime.getManifest().version;
   if (h.connected && Mor.helperOutdated(h.version, mine)) {
-    problems.push(`Mor's helper is version ${h.version}, the extension ${mine}: download Mor's latest release and ` +
-      "run Install Mor.cmd from it");
+    problems.push(`Helper ${h.version} is older than Mor ${mine}: run Install Mor.cmd from the latest release`);
   }
   $("helper-error").textContent = problems.join("\n");
   show($("helper-error"), problems.length > 0);
 }
 
+// A status line: a few words, and under them a problem's whole story when it says more.
+function showStatus(prefix, text, detail, kind) {
+  $(`${prefix}-text`).textContent = text;
+  $(`${prefix}-detail`).textContent = detail || "";
+  show($(`${prefix}-detail`), Boolean(detail));
+  $(`${prefix}-status`).classList.toggle("problem", kind === "bad");
+  $(`${prefix}-dot`).className = "dot " + kind;
+}
+
 function renderFilter() {
   const tab = state.tab;
   const channel = tab && tab.channel;
-  $("filter-channel").textContent = channel
-    ? `Takes the songs out of ${channel}'s sound, keeps the voice and the game`
-    : "Open a Twitch channel's live stream";
+  $("filter-channel").textContent = channel || "No stream open";
   setSwitch($("filter-switch"), Boolean(tab && tab.filterOn), Boolean(channel));
   const on = Boolean(tab && tab.filterOn && channel);
   show($("filter-status"), on);
   if (!on) return;
   const f = tab.filter;
-  const problem = tab.audio || f.problem;
-  let text;
-  if (problem) text = problem;
-  else if (f.state === "filtering") text = f.step || (f.playing ? `Removing ${f.playing}` : "Removing the song");
-  else text = f.step || "Listening for music";
-  $("filter-text").textContent = text;
-  $("filter-status").classList.toggle("problem", Boolean(problem));
-  $("filter-dot").className = "dot " + (problem ? "bad" : f.state === "filtering" ? "on" : "");
+  const row = Mor.rowText(true, f, tab.audio, Date.now());
+  showStatus("filter", row.text, row.detail, row.problem ? "bad" : f.state === "filtering" ? "on" : "");
   const wait = Math.max(0, Math.ceil((f.retryAt - Date.now()) / 1000));
   $("filter-retry").disabled = wait > 0 || !state.helper.connected;
   $("filter-wait").textContent = wait > 0 ? `${wait} s` : "";
@@ -77,38 +77,31 @@ function renderFilter() {
 
 function unlockReadiness() {
   const missing = [];
-  if (!state.loggedIn) missing.push("a Twitch login in Firefox");
-  if (servers.length === 0) missing.push("a VPN server");
-  if (state.helper.connected && state.helper.tunnel === false) missing.push("the tunnel program");
-  if (missing.length) return [`Needs ${missing.join(" and ")}`, false];
-  return [`Ready, ${servers.length} server${servers.length === 1 ? "" : "s"}`, true];
+  if (!state.loggedIn) missing.push("Twitch login");
+  if (servers.length === 0) missing.push("VPN server");
+  if (state.helper.connected && state.helper.tunnel === false) missing.push("tunnel program");
+  if (missing.length) return [`Needs ${missing.join(", ")}`, false];
+  return [`${servers.length} server${servers.length === 1 ? "" : "s"}`, true];
 }
 
 function renderUnlock() {
   const [readiness, ready] = unlockReadiness();
-  $("unlock-sub").textContent = state.unlockOn
-    ? readiness
-    : "Plays region-locked 1440p streams through your VPN, only while you watch them";
+  $("unlock-sub").textContent = state.unlockOn ? readiness : "Off";
   setSwitch($("unlock-switch"), state.unlockOn);
   const tab = state.tab;
   const u = tab && tab.unlock;
-  let text = null, kind = "";
+  let text = null, detail = null, kind = "";
+  const problem = (told) => { [text, detail] = Mor.splitProblem(told); kind = "bad"; };
   if (state.unlockOn && tab && tab.channel) {
-    if (tab.hevc === false) { text = "This Firefox can't play HEVC, which 1440p is sent in"; kind = "bad"; }
-    else if (u && u.via) {
-      text = u.error || `Playing ${u.extra.join(", ")} through ${Mor.serverLabel(u.server)[1]}`;
-      kind = u.error ? "bad" : "good";
-    } else if (u && u.checking) text = "Asking Twitch through the VPN";
-    else if (u && u.error) { text = u.error; kind = "bad"; }
-    else if (u && u.nothingLocked) text = `${tab.channel} has no locked qualities right now`;
-    else if (ready) text = "Checked when the stream starts";
+    if (tab.hevc === false) problem("No HEVC | This Firefox can't play HEVC, which 1440p is sent in");
+    else if (u && u.error) problem(u.error);
+    else if (u && u.via) { text = `${u.extra.join(", ")} via ${Mor.serverLabel(u.server)[1]}`; kind = "good"; }
+    else if (u && u.checking) text = "Asking Twitch via VPN";
+    else if (u && u.nothingLocked) text = "Nothing locked";
+    else if (ready) text = "Waiting for stream";
   }
   show($("unlock-status"), Boolean(text));
-  if (text) {
-    $("unlock-text").textContent = text;
-    $("unlock-status").classList.toggle("problem", kind === "bad");
-    $("unlock-dot").className = "dot " + kind;
-  }
+  if (text) showStatus("unlock", text, detail, kind);
 }
 
 function renderServers() {
@@ -208,7 +201,7 @@ $("filter-retry").addEventListener("click", async () => {
   $("filter-retry").disabled = true;
   const sent = await browser.runtime.sendMessage({ type: "retry", tabId });
   if (!sent) {
-    state.tab.filter.problem = "Couldn't reach the music filter to retry";
+    state.tab.filter.problem = "Retry failed | Couldn't reach the music filter to retry";
   }
   refresh();
 });
