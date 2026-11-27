@@ -19,18 +19,32 @@ function load() {
   const sources = [];
   const nodes = [];
   const page = { href: "https://www.twitch.tv/someone" };
-  const context = {
-    state: "running",
+  // sound.can: whether an AudioContext can start (false: resume() is never answered, as Firefox does before a
+  // click and with no speaker connected); sound.clicked: the page has been clicked
+  const sound = { can: true, clicked: false };
+  const clock = { ahead: 0 };
+  const contexts = [];
+  const pageListeners = {};
+  const makeContext = () => ({
+    state: sound.can ? "running" : "suspended",
+    closed: false,
     destination: new Node("speakers"),
     audioWorklet: { addModule: async () => {} },
-    resume: async () => {},
+    resume() {
+      if (!sound.can) return new Promise(() => {});
+      this.state = "running";
+      return Promise.resolve();
+    },
+    close() { this.closed = true; return Promise.resolve(); },
     createMediaElementSource(v) {
       const s = new Node(`source of ${v.id}`);
       s.video = v;
       sources.push(s);
       return s;
     },
-  };
+  });
+  const context = makeContext();
+  class Clock extends Date { static now() { return Date.now() + clock.ahead; } }
   function AudioWorkletNode() {
     const n = new Node("filter");
     n.port = { messages: [], postMessage(m) { this.messages.push(m); }, onmessage: null };
@@ -39,7 +53,7 @@ function load() {
   }
   const document = {
     querySelectorAll: (sel) => (sel === "video" ? videos : []),
-    addEventListener: () => {},
+    addEventListener: (kind, fn) => { (pageListeners[kind] = pageListeners[kind] || []).push(fn); },
   };
   const sandbox = {
     browser: {
@@ -51,10 +65,16 @@ function load() {
     location: page,
     document,
     MediaSource: { isTypeSupported: () => true },
-    AudioContext: function () { return context; },
+    AudioContext: function () {
+      const made = contexts.length ? makeContext() : Object.assign(context, { state: makeContext().state });
+      contexts.push(made);
+      return made;
+    },
     AudioWorkletNode,
-    WeakMap, Date, Math, URL, Promise, Error, JSON, ArrayBuffer, Uint8Array, Int16Array, console,
+    navigator: { userActivation: { get hasBeenActive() { return sound.clicked; } } },
+    WeakMap, Date: Clock, Math, URL, Promise, Error, JSON, ArrayBuffer, Uint8Array, Int16Array, console,
     setInterval: () => 0,
+    setTimeout: (fn) => setTimeout(fn, 1), // (the wait for the sound's start, cut short)
     getComputedStyle: () => ({ opacity: "0", visibility: "visible", position: "relative" }),
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
@@ -70,10 +90,66 @@ function load() {
     return v;
   };
   return {
-    sent, videos, sources, nodes, context, page, video,
+    sent, videos, sources, nodes, context, contexts, page, video, sound, clock,
     say: async (m) => { for (const fn of listeners) fn(m); await new Promise((r) => setTimeout(r, 5)); },
+    click: async () => {
+      sound.clicked = true;
+      for (const fn of pageListeners.pointerdown || []) fn({});
+      await new Promise((r) => setTimeout(r, 5));
+    },
+    problems: () => sent.filter((m) => m.type === "audio").map((m) => m.problem),
   };
 }
+
+test("the sound can't start before a click: said, not waited for without end, and a click starts the filter", async () => {
+  const t = load();
+  t.sound.can = false;
+  t.videos.push(t.video("a"));
+  await t.say({ type: "filter", on: true });
+  assert.match(t.problems().at(-1), /^Click the stream \| /);
+  assert.strictEqual(t.sent.filter((m) => m.type === "filter-start").length, 0);
+  t.sound.can = true; // (a click is what lets it)
+  await t.click();
+  assert.strictEqual(t.sent.filter((m) => m.type === "filter-start").length, 1);
+  assert.strictEqual(t.problems().at(-1), null);
+  const used = t.contexts.at(-1);
+  assert.deepStrictEqual(t.sources[0].to, [t.nodes[0]]);
+  assert.deepStrictEqual(t.nodes[0].to, [used.destination]);
+});
+
+test("no speaker connected: said, and the filter starts by itself once there is one", async () => {
+  const t = load();
+  t.sound.can = false;
+  t.sound.clicked = true;
+  t.videos.push(t.video("a"));
+  await t.say({ type: "filter", on: true });
+  assert.match(t.problems().at(-1), /^No sound output \| /);
+  t.sound.can = true; // the headphones connect
+  await t.say({ type: "filter", on: true }); // (a tick, too soon: not tried over and over)
+  assert.strictEqual(t.sent.filter((m) => m.type === "filter-start").length, 0);
+  t.clock.ahead = 6000;
+  await t.say({ type: "filter", on: true }); // (a tick)
+  assert.strictEqual(t.sent.filter((m) => m.type === "filter-start").length, 1);
+  assert.strictEqual(t.problems().at(-1), null);
+  // the one that couldn't start is given up for a new one, as a page loaded again would have
+  assert.strictEqual(t.contexts.length, 2);
+  assert.strictEqual(t.contexts[0].closed, true);
+  assert.deepStrictEqual(t.nodes[0].to, [t.contexts[1].destination]);
+});
+
+test("a context that has run is kept: its videos' sound is tied to it", async () => {
+  const t = load();
+  t.videos.push(t.video("a"));
+  await t.say({ type: "filter", on: true });
+  await t.say({ type: "filter", on: false });
+  t.context.state = "suspended";
+  t.sound.can = false;
+  t.sound.clicked = true;
+  await t.say({ type: "filter", on: true });
+  assert.match(t.problems().at(-1), /^No sound output \| /);
+  assert.strictEqual(t.contexts.length, 1);
+  assert.strictEqual(t.context.closed, false);
+});
 
 test("the filter starts on the player's video, and its sound goes through it to the speakers", async () => {
   const t = load();

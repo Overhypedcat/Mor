@@ -12,7 +12,11 @@
 
   let channel = null;
   let wanted = false; // the music filter is on for this channel
-  let context = null; // the AudioContext, made once
+  const START_WAIT_MS = 3000; // how long the sound's start is waited for before it's said to be stuck
+  const START_AGAIN_MS = 5000; // ...and how long until it's tried again by itself
+  let context = null; // the AudioContext: one for the page, once it has run
+  let ran = false; // the context has run (videos' sound is tied to it from then on)
+  let tryAt = 0; // the sound couldn't start: not tried again before this time (a click tries at once)
   let moduleReady = null;
   const sources = new WeakMap(); // video -> its MediaElementAudioSourceNode (one per element, ever)
   let video = null; // the player's video element the sound is taken from
@@ -58,19 +62,36 @@
 
   // the sound's way
 
+  // Firefox leaves resume() unanswered, for good, while the sound can't start: no click on the page yet, or no
+  // speaker or headphone connected (Bluetooth ones not yet on). So it's waited for only so long, said, and tried
+  // again (tick, every START_AGAIN_MS and at a click): with a new AudioContext while none has ever run, as one
+  // that couldn't start may never do (no video's sound is tied to it yet).
   async function ready() {
+    if (context && !ran && context.state !== "running") {
+      try { context.close().catch(() => {}); } catch (error) { /* it never started: nothing to close */ }
+      context = null;
+    }
     if (!context) {
       context = new AudioContext({ sampleRate: 48000 });
       moduleReady = context.audioWorklet.addModule(browser.runtime.getURL("audio/filter-worklet.js"));
     }
+    const mine = context;
     await moduleReady;
-    if (context.state !== "running") {
-      try { await context.resume(); } catch (error) { /* told below */ }
+    if (mine.state !== "running") {
+      let resumed;
+      try { resumed = mine.resume().catch(() => {}); } catch (error) { /* told below */ }
+      await Promise.race([resumed, new Promise((resolve) => setTimeout(resolve, START_WAIT_MS))]);
     }
-    if (context.state !== "running") {
-      setAudioProblem("Click the stream | Firefox lets Mor hear the stream only after a click on the page");
+    if (mine.state !== "running") {
+      const clicked = typeof navigator !== "undefined" && navigator.userActivation
+        && navigator.userActivation.hasBeenActive;
+      setAudioProblem(clicked
+        ? "No sound output | Firefox couldn't start Mor's sound: is a speaker or headphone connected? Mor tries "
+          + "again by itself"
+        : "Click the stream | Firefox lets Mor hear the stream only after a click on the page");
       return false;
     }
+    ran = true;
     setAudioProblem(null);
     return true;
   }
@@ -81,7 +102,10 @@
   }
 
   async function startFilter(v) {
-    if (!(await ready())) return;
+    if (!(await ready())) {
+      tryAt = Date.now() + START_AGAIN_MS;
+      return;
+    }
     if (!wanted || channel === null || v !== playerVideo()) return; // changed while getting ready
     stopFilter();
     const source = sourceOf(v);
@@ -190,12 +214,13 @@
       moveFilter(v);
       return;
     }
-    if (starting) return;
+    if (starting || Date.now() < tryAt) return;
     starting = true;
     try {
       await startFilter(v);
     } catch (error) {
       setAudioProblem(`No stream sound | Mor couldn't reach the stream's sound: ${error.message}`);
+      tryAt = Date.now() + START_AGAIN_MS;
     } finally {
       starting = false;
     }
@@ -208,7 +233,13 @@
   }
   // a click is what lets the page play sound: the filter can start then, if it was waiting for one
   for (const kind of ["pointerdown", "keydown"]) {
-    document.addEventListener(kind, () => { if (audioProblem && context) tick(); }, true);
+    document.addEventListener(kind, () => {
+      if (!audioProblem || !context) return;
+      // (asked for within the click itself, which is what Firefox wants: a start being waited for goes on from it)
+      try { context.resume().catch(() => {}); } catch (error) { /* said by the next try */ }
+      tryAt = 0;
+      tick();
+    }, true);
   }
 
   // the music filter's row in Twitch's player controls, on a channel's live stream
