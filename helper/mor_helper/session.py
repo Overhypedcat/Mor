@@ -11,7 +11,7 @@ import time
 
 import numpy as np
 
-from mor_helper.musicfilter import relay, songs, status
+from mor_helper.musicfilter import relay, songs, status, unnamed
 
 CHUNK = 512 * 1024  # bytes of a song's copy per message: native messages to Firefox stay under 1 MB
 WATCH_S = 0.01  # how often the Tracker's .playing is looked at, to tell the tab as soon as it changes
@@ -56,6 +56,7 @@ class FilterSession:
                                        on_until=self.teller.until, clock=clock)
         self.tracker.budget = budget
         self._log_copies()
+        self._log_answers()
         self.stopped = threading.Event()
         self.sent_copy = None  # the YouTube id of the copy the tab holds
         self.told = None  # the Playing the tab was last told
@@ -77,6 +78,31 @@ class FilterSession:
             log.info("%s trying YouTube copy %s", self.sid, video_id)
             return copy(video_id)
         self.tracker._copy = logged
+
+    def _log_answers(self):
+        """What Shazam answered each time it was asked, in the log; the sound it couldn't name is kept on disk
+        (unnamed.py), so a missed song can be looked into afterwards. Its answer goes on to the Tracker untouched."""
+        recognize = getattr(self.tracker, "recognize", None)
+        if recognize is None:
+            return
+
+        def logged(sound):
+            seconds = len(sound) / relay.RATE
+            try:
+                song = recognize(sound)
+            except Exception as error:
+                log.info("%s Shazam: no answer on %.1f s (%s)", self.sid, seconds, songs.reason(error))
+                raise
+            if song:
+                log.info("%s Shazam: %s, on %.1f s", self.sid, song, seconds)
+                return song
+            try:
+                kept = f"kept as {unnamed.keep(sound)}"
+            except OSError as error:
+                kept = f"which couldn't be kept: {songs.reason(error)}"
+            log.info("%s Shazam: no song in %.1f s (level %.4f), %s", self.sid, seconds, unnamed.level(sound), kept)
+            return song
+        self.tracker.recognize = logged
 
     def start(self):
         log.info("%s filter started", self.sid)

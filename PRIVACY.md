@@ -29,6 +29,9 @@ Nothing else is sent anywhere.
   again (at most 1 GB; the oldest are removed first).
 - **The helper's log:** what the music filter did, step by step (`%LOCALAPPDATA%\Mor\helper.log`, a few MB at most),
   for you to read or to send along with a problem report if you choose to.
+- **Clips Shazam couldn't name:** the last 20 of the short clips of the stream's sound that Shazam had no song for,
+  kept in `%LOCALAPPDATA%\Mor\unnamed` (about 10 MB at most; the oldest are removed first), so a song the filter
+  missed can be looked into. They are never sent anywhere again.
 - **Your choices:** which channels you switched the music filter on for, and whether the 1440p unlock is on, kept
   in Firefox's storage for the extension.
 
