@@ -19,7 +19,7 @@ from mor_helper.musicfilter import relay, songs, status
 from mor_helper.session import FilterSession
 from mor_helper.youtube import js_runtimes
 
-VERSION = "1.0.6"
+VERSION = "1.0.7"
 log = logging.getLogger("mor")
 
 

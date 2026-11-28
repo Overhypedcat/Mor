@@ -25,13 +25,20 @@ function load() {
   const clock = { ahead: 0 };
   const contexts = [];
   const pageListeners = {};
-  const makeContext = () => ({
-    state: sound.can ? "running" : "suspended",
+  // As Firefox: a window whose sound couldn't start once stays stuck, for every context made in it later too.
+  const pageWindow = { stuck: false };
+  const frames = [];
+  const rows = [];
+  const intervals = [];
+  const makeContext = (win = pageWindow) => ({
+    state: (win.stuck = win.stuck || !sound.can) ? "suspended" : "running",
     closed: false,
+    window: win,
     destination: new Node("speakers"),
     audioWorklet: { addModule: async () => {} },
     resume() {
-      if (!sound.can) return new Promise(() => {});
+      if (!sound.can) win.stuck = true;
+      if (win.stuck) return new Promise(() => {});
       this.state = "running";
       return Promise.resolve();
     },
@@ -54,6 +61,22 @@ function load() {
   const document = {
     querySelectorAll: (sel) => (sel === "video" ? videos : []),
     addEventListener: (kind, fn) => { (pageListeners[kind] = pageListeners[kind] || []).push(fn); },
+    createElement: (tag) => {
+      assert.strictEqual(tag, "iframe");
+      const win = { stuck: false };
+      const frame = {
+        isConnected: false, style: {}, attributes: {},
+        setAttribute(name, value) { this.attributes[name] = value; },
+        remove() { this.isConnected = false; },
+        contentWindow: {
+          AudioContext: function () { const made = makeContext(win); contexts.push(made); return made; },
+          AudioWorkletNode,
+        },
+      };
+      frames.push(frame);
+      return frame;
+    },
+    documentElement: { append: (frame) => { frame.isConnected = true; } },
   };
   const sandbox = {
     browser: {
@@ -73,7 +96,8 @@ function load() {
     AudioWorkletNode,
     navigator: { userActivation: { get hasBeenActive() { return sound.clicked; } } },
     WeakMap, Date: Clock, Math, URL, Promise, Error, JSON, ArrayBuffer, Uint8Array, Int16Array, console,
-    setInterval: () => 0,
+    setInterval: (fn) => { intervals.push(fn); return 0; },
+    rows,
     setTimeout: (fn) => setTimeout(fn, 1), // (the wait for the sound's start, cut short)
     getComputedStyle: () => ({ opacity: "0", visibility: "visible", position: "relative" }),
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
@@ -83,14 +107,17 @@ function load() {
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../lib/shared.js"), "utf8"), sandbox);
   // the player's row needs a real page; here it's a stand-in that draws nothing
-  vm.runInContext("var PlayerRow = { Row: class { place() {} remove() {} update() {} } };", sandbox);
+  vm.runInContext("var PlayerRow = { Row: class { constructor(onRetry) { this.onRetry = onRetry; rows.push(this); } "
+    + "place() {} remove() {} update(model) { this.model = model; } } };", sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../content/twitch.js"), "utf8"), sandbox);
   const video = (id, size = 1000) => {
-    const v = { id, paused: false, getBoundingClientRect: () => ({ width: size, height: size / 2 }), closest: () => null };
-    return v;
+    const within = { querySelector: () => within }; // Twitch's player around it, its controls, their right group
+    return { id, paused: false, getBoundingClientRect: () => ({ width: size, height: size / 2 }), closest: () => within };
   };
   return {
-    sent, videos, sources, nodes, context, contexts, page, video, sound, clock,
+    sent, videos, sources, nodes, context, contexts, frames, page, video, sound, clock,
+    row: () => { intervals[1](); return rows[0]; }, // the player's row, as last drawn
+    starts: () => sent.filter((m) => m.type === "filter-start").length,
     say: async (m) => { for (const fn of listeners) fn(m); await new Promise((r) => setTimeout(r, 5)); },
     click: async () => {
       sound.clicked = true;
@@ -131,10 +158,77 @@ test("no speaker connected: said, and the filter starts by itself once there is 
   await t.say({ type: "filter", on: true }); // (a tick)
   assert.strictEqual(t.sent.filter((m) => m.type === "filter-start").length, 1);
   assert.strictEqual(t.problems().at(-1), null);
-  // the one that couldn't start is given up for a new one, as a page loaded again would have
+  // the page's own never starts once it couldn't: the new one is of a hidden inner frame, a window of its own
   assert.strictEqual(t.contexts.length, 2);
   assert.strictEqual(t.contexts[0].closed, true);
+  assert.strictEqual(t.frames.length, 1);
+  assert.strictEqual(t.frames[0].isConnected, true);
+  assert.strictEqual(t.frames[0].style.display, "none");
+  assert.notStrictEqual(t.contexts[1].window, t.contexts[0].window);
   assert.deepStrictEqual(t.nodes[0].to, [t.contexts[1].destination]);
+});
+
+test("still no speaker at the next try: that frame is given up too, none pile up", async () => {
+  const t = load();
+  t.sound.can = false;
+  t.sound.clicked = true;
+  t.videos.push(t.video("a"));
+  await t.say({ type: "filter", on: true });
+  for (const ahead of [6000, 12000, 18000]) {
+    t.clock.ahead = ahead;
+    await t.say({ type: "filter", on: true }); // (a tick)
+  }
+  assert.strictEqual(t.starts(), 0);
+  assert.match(t.problems().at(-1), /^No sound output \| /);
+  assert.strictEqual(t.frames.length, 3);
+  assert.strictEqual(t.frames.filter((f) => f.isConnected).length, 1); // the one being tried
+  t.sound.can = true;
+  t.clock.ahead = 24000;
+  await t.say({ type: "filter", on: true });
+  assert.strictEqual(t.starts(), 1);
+  assert.strictEqual(t.frames.filter((f) => f.isConnected).length, 1);
+});
+
+test("the retry button tries the sound's start again at once; the hub's does too", async () => {
+  const t = load();
+  t.sound.can = false;
+  t.sound.clicked = true;
+  t.videos.push(t.video("a"));
+  await t.say({ type: "filter", on: true });
+  assert.strictEqual(t.row().model.running, true); // the button can be pressed while the sound hasn't started
+  t.sound.can = true;
+  t.row().onRetry(); // (well before the next try by itself)
+  await new Promise((r) => setTimeout(r, 5));
+  assert.strictEqual(t.starts(), 1);
+  assert.ok(!t.sent.some((m) => m.type === "retry")); // nothing to look for afresh yet
+
+  const u = load();
+  u.sound.can = false;
+  u.videos.push(u.video("a"));
+  await u.say({ type: "filter", on: true });
+  u.sound.can = true;
+  await u.say({ type: "start-again" });
+  assert.strictEqual(u.starts(), 1);
+});
+
+test("the page removing the frame the sound plays through: said, as only loading the page again helps", async () => {
+  const t = load();
+  t.sound.can = false;
+  t.sound.clicked = true;
+  t.videos.push(t.video("a"));
+  await t.say({ type: "filter", on: true });
+  t.sound.can = true;
+  t.clock.ahead = 6000;
+  await t.say({ type: "filter", on: true });
+  assert.strictEqual(t.starts(), 1);
+  t.frames[0].isConnected = false;
+  await t.say({ type: "filter", on: true }); // (a tick)
+  assert.match(t.problems().at(-1), /^Reload the page \| /);
+  assert.ok(t.sent.some((m) => m.type === "filter-stop"));
+  assert.strictEqual(t.row().model.running, false); // nothing the retry button could do
+  t.clock.ahead = 60000;
+  await t.say({ type: "filter", on: true });
+  assert.strictEqual(t.starts(), 1);
 });
 
 test("a context that has run is kept: its videos' sound is tied to it", async () => {

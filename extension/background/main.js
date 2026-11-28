@@ -342,6 +342,14 @@ function toggleFilter(tab) {
 
 // The retry: the filter forgets the song and asks Shazam afresh. False when it can't be sent.
 function retryFilter(tab) {
+  if (tab && !tab.sid && tab.audio) { // the tab's sound couldn't start: its start is tried again at once
+    try {
+      tab.port.postMessage({ type: "start-again" });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
   if (!tab || !tab.sid) return false;
   if (!helper.post({ type: "retry", sid: tab.sid })) {
     tab.filter = { ...tab.filter, problem: "Retry failed | Couldn't reach the music filter to retry" };

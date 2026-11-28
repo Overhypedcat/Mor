@@ -236,6 +236,16 @@ test("the player's retry button reaches the helper", async () => {
   assert.ok(port.sent.filter((x) => x.type === "state").at(-1).filter.retryAt > Date.now());
 });
 
+test("the hub's retry, with the tab's sound not started: the tab tries its start again", async () => {
+  const m = load();
+  const port = m.tab(1, "someone");
+  await m.ask({ type: "toggle-filter", tabId: 1 });
+  assert.strictEqual(await m.ask({ type: "retry", tabId: 1 }), false); // nothing started, nothing wrong: no retry
+  port.onMessage.fire({ type: "audio", problem: "No sound output | Firefox couldn't start Mor's sound" });
+  assert.strictEqual(await m.ask({ type: "retry", tabId: 1 }), true);
+  same(told(port).at(-1), { type: "start-again" });
+});
+
 test("the music filter: the tab's sound to the helper, the helper's news to the tab", async () => {
   const m = load();
   const port = m.tab(1, "someone");
